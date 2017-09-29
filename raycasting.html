@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<style>
+
+body {background-color:#000;
+        }
+canvas {
+margin:2px;
+ display:inline-block;
+    width:640px;
+    height:480px;
+}
+#container,#container2 {
+    
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    width:100%;
+    height:100%;
+}
+#container2{}
+fps{color:white;}
+h1,h2{padding-top:1em;color:white;text-align:center;font-family:Courier;}
+
+</style>
+
+</head>
+<body>
+<h1>
+<!--<div id='fps'></div></h1>-->
+<div id='container'>
+<canvas id='cvs' width=640px height=480px>Loading...</canvas>
+</div>
+<div id='container2'>
+
+</div>
+<!--<script src="glfx.js"></script>-->
+<!--<script src="vfx.js"></script>-->
+<!--<script src="audio.js"></script>
+<script src="map.js"></script>
+<script src="input.js"></script>
+<script src="weapons.js"></script>
+<script src="player.js"></script>-->
+<script>document.onselectstart = function() { return false; };</script>
+<script src="input.js"></script>
+<script src="mousetrap.js"></script>
+<script src="howler.js"></script>
+<script src="raycastmain.js"></script>
+
+
+</body>
+
+</html>
