@@ -1,6 +1,6 @@
 
 var NUM_PLAYERS = 4;
-var MAP_NAME = 'ndu';
+var MAP_NAME = 'vkt';
 
 canvas = document.getElementById('cvs');
 var canvasBuffer = {};
@@ -8,49 +8,57 @@ canvasBuffer.floor = [];
 canvasBuffer.walls = [];
 canvasBuffer.blood = [];
 
-var CANVAS_WIDTH = 640*2;
-var CANVAS_HEIGHT = 480*2; // to fix unknown drawimage lag at parts of map...
+//heavily affects lag...
+var CANVAS_WIDTH = 640;//640*2;
+var CANVAS_HEIGHT = 480;//480*2; // to fix unknown drawimage lag at parts of map...
+//xxx*1 from xxx*2 helped, gpu acceleration still falls over when many floors are rendered
+//buffer height/width in tiles, size 32
+var BUFFER_WIDTH = 70;
+var BUFFER_HEIGHT = 50;
+//making buffers too large destroys performance...
+//resolution for multiple players may need adjusting
 
 for(var i=0;i<4;i++){
 
 canvasBuffer.floor[i] = document.createElement('canvas');
-canvasBuffer.floor[i].width = CANVAS_WIDTH*8;
-canvasBuffer.floor[i].height = CANVAS_HEIGHT*8;
+canvasBuffer.floor[i].width = BUFFER_WIDTH*32;
+canvasBuffer.floor[i].height = BUFFER_HEIGHT*32;
 canvasBuffer.floor[i].ctx = canvasBuffer.floor[i].getContext('2d');
 
 canvasBuffer.walls[i] = document.createElement('canvas');
-canvasBuffer.walls[i].width = CANVAS_WIDTH*8;
-canvasBuffer.walls[i].height = CANVAS_HEIGHT*8;
+canvasBuffer.walls[i].width = BUFFER_WIDTH*32;
+canvasBuffer.walls[i].height = BUFFER_HEIGHT*32;
 canvasBuffer.walls[i].ctx = canvasBuffer.walls[i].getContext('2d');
 
 canvasBuffer.blood[i] = document.createElement('canvas');
-canvasBuffer.blood[i].width = CANVAS_WIDTH*8;
-canvasBuffer.blood[i].height = CANVAS_HEIGHT*8;
+canvasBuffer.blood[i].width = BUFFER_WIDTH*32;
+canvasBuffer.blood[i].height = BUFFER_HEIGHT*32;
 canvasBuffer.blood[i].ctx = canvasBuffer.blood[i].getContext('2d');
 }
 
-var drawLayers = [];
+//drawlayers not currently used!
+/*var drawLayers = [];
 for(var i = 0;i<4;i++){
 drawLayers[i]= document.createElement('canvas');
 drawLayers[i].width = CANVAS_WIDTH*8;
 drawLayers[i].height = CANVAS_HEIGHT*8;
 drawLayers[i].ctx = drawLayers[i].getContext('2d');
-}
+}*/
 
 var secondCanvas = document.createElement('canvas');
-secondCanvas.width = CANVAS_WIDTH/2;
-secondCanvas.height = CANVAS_HEIGHT/2;
+secondCanvas.width = CANVAS_WIDTH;
+secondCanvas.height = CANVAS_HEIGHT;
 secondCanvas.ctx = secondCanvas.getContext('2d');
 
 var thirdCanvas = document.createElement('canvas');
-thirdCanvas.width = CANVAS_WIDTH/2;
-thirdCanvas.height = CANVAS_HEIGHT/2;
+thirdCanvas.width = CANVAS_WIDTH;
+thirdCanvas.height = CANVAS_HEIGHT;
 thirdCanvas.ctx = thirdCanvas.getContext('2d');
 
 
 var fourthCanvas = document.createElement('canvas');
-fourthCanvas.width = CANVAS_WIDTH/2;
-fourthCanvas.height = CANVAS_HEIGHT/2;
+fourthCanvas.width = CANVAS_WIDTH;
+fourthCanvas.height = CANVAS_HEIGHT;
 fourthCanvas.ctx = fourthCanvas.getContext('2d');
 
 if(NUM_PLAYERS>1){
@@ -972,8 +980,8 @@ class Maps {
                             '........X,,,,,,,,,X,,,,,,X,,,F............XXXXXXXXXXXXXXXX......................' + 
                             '........XXXXXXXDDXX,,,,,,X,,,X..............,,,,XXXXXXXXXX......................' + 
                             '..............X,,,X,,,,,,XXFXX..............,,,,XXXXXXXXX.......................' + 
-                            '..............X,,,X,,,,,,W....................,,XXXXXXXXX.......................' + 
-                            '..............X,,,X,,,,,,X.................XXX,,XXXXXXXXX.......................' + 
+                            '..............X,,,X,,,,,,W.................XXX,,XXXXXXXXX.......................' + 
+                            '..............X,,,X,,,,,,X................XXXX,,XXXXXXXXX.......................' + 
                             '..............X,,,XXXDDXXXXFXFXWXFXFWXX...XXXXXXXXXXXXXXX.......................' + 
                             '..............X,,,X,,,,,,,,,,,,,,,,,,,X.X.XXXXXXXXXXXXXXXX......................' + 
                             '..............X,,,F,,,,,,,,,,,,,,,,,,,X...XXXXXXXXXXXXXXXX......................' + 
@@ -1518,9 +1526,9 @@ class RoundManager {
     getMaxZombies(pcount){
         return (24 + (pcount-1)*6);
     }
-    spawnZombies(){
+    spawnZombies(yes=true){
         //small error at start of earlier rounds, maybe until reached 24 zombies for the firrst time?
-
+if(yes){
        var max = this.getMaxZombies(NUM_PLAYERS);
     
         if(this.zombiesSpawned < this.getZombieCount(this.round,NUM_PLAYERS) && this.zombiesSpawned-this.zombiesKilled < max){
@@ -1539,6 +1547,7 @@ class RoundManager {
                 }
             }
         }
+    }
     }
 
  // credit: zombulator.com
@@ -1731,6 +1740,7 @@ class ImageManager {
 
 //vkt
         this.floorDecals['vkt'] = [];
+        //=document.createElement("img"); better?
         this.floorDecals['vkt'][0] = new Image();
         this.floorDecals['vkt'][0].src = 'images/maps/vkt/floor_decals_0.png';
         this.floorDecals['vkt'][1] = new Image();
@@ -2916,7 +2926,7 @@ function main() {
                      dijkstraMap.setGoals(goals);
                  }
 
-
+                    //march commented
                  dijkstraMap.calculate();
 
                 //updatezombiepaths when complete - hopefully no map is so yuge that it will take more than 600 iterations
@@ -2972,10 +2982,11 @@ function main() {
                 var ctx = canvases[p];
                gameCamera.follow(players[p]);
               ctx.setTransform(1,0,0,1,-gameCamera.x,-gameCamera.y);
-          
+              //does clearrect have any effect?
+                //ctx.clearRect(0,0,w,h);
                renderAssets(ctx);
                ctx.setTransform(1,0,0,1,0,0);
-               renderHud(ctx,p);
+              renderHud(ctx,p);
        }
        // var f = parseInt(players[0].currentFloor);
     //    players[0].currentFloor = 1;
@@ -3534,8 +3545,7 @@ function renderAssets(context) {
     for(var f=0;f<gameCamera.floor+1;f++){
     // for(var f=0;f<2;f++){
     //for(var f= gameCamera.floor; f<gameCamera.floor+1;f++){
-
-        
+        //draw trasparent fog layer
         if(f>0){
             ctx.setTransform(1,0,0,1,0,0);
             ctx.globalAlpha = 0.35;
@@ -3544,62 +3554,61 @@ function renderAssets(context) {
             ctx.globalAlpha=1;
             //ctx.setTransform(1,0,0,1,-Math.floor(gameCamera.x),-Math.floor(gameCamera.y));
             ctx.setTransform(1,0,0,1,-(gameCamera.x),-(gameCamera.y));
-          
         }
-        //still something fishy going on
-        // try using draw with img,sx,sy,sw,sh,dx,dy,dw,dh, might have an impact if not already optimised for drawing off canvas? :(
-    //ctx.drawImage(canvasBuffer.floor[f],0,0);
+            //still something fishy going on
+            // try using draw with img,sx,sy,sw,sh,dx,dy,dw,dh, might have an impact if not already optimised for drawing off canvas? :(
+        //ctx.drawImage(canvasBuffer.floor[f],0,0);
 
-    //option to halve resolution for more players
-    // black lines on second floor - perhaps render the 35% black onto the floor buffer?
+        //option to halve resolution for more players
+        // black lines on second floor - perhaps render the 35% black onto the floor buffer?
 
-    ctx.drawImage(canvasBuffer.floor[f],gameCamera.x,gameCamera.y,w,h,gameCamera.x,gameCamera.y,w,h);
+        //PROBLEM AREA
 
-    ctx.globalAlpha=0.8;
-    ctx.globalCompositeOperation='darken';
-    ctx.drawImage(canvasBuffer.blood[f],gameCamera.x,gameCamera.y,w,h,gameCamera.x,gameCamera.y,w,h);
-    ctx.globalAlpha=1;
-    ctx.globalCompositeOperation='source-over';
-    ctx.drawImage(canvasBuffer.walls[f],gameCamera.x,gameCamera.y,w,h,gameCamera.x,gameCamera.y,w,h);
+        ctx.drawImage(canvasBuffer.floor[f],gameCamera.x,gameCamera.y,w,h,gameCamera.x,gameCamera.y,w,h);
 
-    //draw zombies on that floor
+         ctx.globalAlpha=0.8;
+       ctx.globalCompositeOperation='darken';
+       ctx.drawImage(canvasBuffer.blood[f],gameCamera.x,gameCamera.y,w,h,gameCamera.x,gameCamera.y,w,h);
+       ctx.globalAlpha=1;
+       ctx.globalCompositeOperation='source-over';
+           ctx.drawImage(canvasBuffer.walls[f],gameCamera.x,gameCamera.y,w,h,gameCamera.x,gameCamera.y,w,h);
+        
+
+        // end PROBLEM AREA
+
+            //draw zombies on that floor
 
    
 
     //draw zombies new style
-    for(var i = 0; i < zombies.length;i++){
-        if(zombies[i].alive && zombies[i].currentFloor == f){
-        
-        ctx.translate(zombies[i].pos.x,zombies[i].pos.y);
-        ctx.rotate(zombies[i].angleFacing+Math.PI/2);
-        ctx.drawImage(Images.zombie, zombies[i].currentFrame*Images.zombie.size,0,Images.zombie.size,Images.zombie.size,
-                      -16,-21,Images.character.size,Images.character.size);
-        ctx.rotate(-zombies[i].angleFacing-Math.PI/2);
-        ctx.translate(-zombies[i].pos.x,-zombies[i].pos.y);
-       
-     }
-    }
+        for(var i = 0; i < zombies.length;i++){
+            if(zombies[i].alive && zombies[i].currentFloor == f){
+                ctx.translate(zombies[i].pos.x,zombies[i].pos.y);
+                ctx.rotate(zombies[i].angleFacing+Math.PI/2);
+                ctx.drawImage(Images.zombie, zombies[i].currentFrame*Images.zombie.size,0,Images.zombie.size,Images.zombie.size,
+                              -16,-21,Images.character.size,Images.character.size);
+                ctx.rotate(-zombies[i].angleFacing-Math.PI/2);
+                ctx.translate(-zombies[i].pos.x,-zombies[i].pos.y);
+             }
+         }
 
      //draw death sprites/animations
-    for(var i =0;i<GameStage.objects.length;i++){
-        if(GameStage.objects[i].floor == f){
-            ctx.translate(GameStage.objects[i].x,GameStage.objects[i].y);
-            ctx.rotate(GameStage.objects[i].rotation+Math.PI/2);
-            ctx.drawImage(GameStage.objects[i].img, GameStage.objects[i].currentFrame*GameStage.objects[i].size,0,GameStage.objects[i].size,GameStage.objects[i].size,
-                          -16,-21,GameStage.objects[i].size,GameStage.objects[i].size);
-            ctx.rotate(-GameStage.objects[i].rotation-Math.PI/2);
-            ctx.translate(-GameStage.objects[i].x,-GameStage.objects[i].y);
+        for(var i =0;i<GameStage.objects.length;i++){
+            if(GameStage.objects[i].floor == f){
+                ctx.translate(GameStage.objects[i].x,GameStage.objects[i].y);
+                ctx.rotate(GameStage.objects[i].rotation+Math.PI/2);
+                ctx.drawImage(GameStage.objects[i].img, GameStage.objects[i].currentFrame*GameStage.objects[i].size,0,GameStage.objects[i].size,GameStage.objects[i].size,
+                              -16,-21,GameStage.objects[i].size,GameStage.objects[i].size);
+                ctx.rotate(-GameStage.objects[i].rotation-Math.PI/2);
+                ctx.translate(-GameStage.objects[i].x,-GameStage.objects[i].y);
+            }
+            if(thinkCount%2==0){ GameStage.objects[i].nextFrame();} //animate at 30fps
+            if(GameStage.objects[i].currentFrame>=GameStage.objects[i].frames){
+                 GameStage.removeChild(i);
+            }
         }
-       if(thinkCount%2==0){ GameStage.objects[i].nextFrame();} //animate at 30fps
-        if(GameStage.objects[i].currentFrame>=GameStage.objects[i].frames){
-           
-             GameStage.removeChild(i);
-        }
+
     }
-
-
-
-}
 
 
 
@@ -3621,28 +3630,28 @@ function renderAssets(context) {
     ctx.stroke();*/
 
     for(var i = 0; i < NUM_PLAYERS;i++){
-  if(players[i].drawLaser>0 && players[i].currentFloor == gameCamera.floor){
-    //console.log('drawlaser');
-      ctx.lineWidth=1;
-    ctx.beginPath();
-    ctx.strokeStyle = '#FF0';
-  //  ctx.strokeStyle = '#000';
-    if(players[i].weapon.internalName=='raygun'){
-        ctx.strokeStyle='#0F0';
-        ctx.lineWidth = 4;
-    }
-    //ctx.globalCompositeOperation='lighten';
-    //ctx.globalAlpha=0.5;
-    ctx.moveTo(players[i].ray[0].x,players[i].ray[0].y);
-    ctx.lineTo(players[i].ray[1].x,players[i].ray[1].y);
-    ctx.stroke();
- // ctx.globalAlpha = 1;
-  //ctx.globalCompositeOperation='source-over';
-    
-}
+          if(players[i].drawLaser>0 && players[i].currentFloor == gameCamera.floor){
+                //console.log('drawlaser');
+                  ctx.lineWidth=1;
+                ctx.beginPath();
+                ctx.strokeStyle = '#FF0';
+              //  ctx.strokeStyle = '#000';
+                if(players[i].weapon.internalName=='raygun'){
+                    ctx.strokeStyle='#0F0';
+                    ctx.lineWidth = 4;
+                }
+                //ctx.globalCompositeOperation='lighten';
+                //ctx.globalAlpha=0.5;
+                ctx.moveTo(players[i].ray[0].x,players[i].ray[0].y);
+                ctx.lineTo(players[i].ray[1].x,players[i].ray[1].y);
+                ctx.stroke();
+             // ctx.globalAlpha = 1;
+              //ctx.globalCompositeOperation='source-over';
+            
+           }
 
-    ctx.strokeStyle='#FFFF00';
-}
+            ctx.strokeStyle='#FFFF00';
+    }
     //ctx.strokeCircle(ray.x, ray.y,5);
 
    // ctx.fillStyle='#40F';
@@ -3650,38 +3659,41 @@ function renderAssets(context) {
    //draw player
    // ctx.translate(Math.floor(players[0].pos.x),Math.floor(players[0].pos.y));
    for(var p = 0;p<NUM_PLAYERS;p++){
-    if(gameCamera.floor == players[p].currentFloor){
-        if(players[p].down){ctx.globalAlpha = 0.65;}
-    ctx.translate((players[p].pos.x),(players[p].pos.y));
-    ctx.rotate(players[p].playerFacing+Math.PI/2);
+        if(gameCamera.floor == players[p].currentFloor){
+            if(players[p].down){ctx.globalAlpha = 0.65;}
+            ctx.translate((players[p].pos.x),(players[p].pos.y));
+            ctx.rotate(players[p].playerFacing+Math.PI/2);
 
-    //test rendering for melee attack
-    if(p==0 && players[0].meleeWeapon.meleeTimer > 0){
-    ctx.drawImage(Images.characterMelee, 0+(10-players[p].meleeWeapon.meleeTimer)*Images.character.size,0,Images.character.size,Images.character.size,
-                  -16,-21,Images.character.size,Images.character.size);
+            //test rendering for melee attack
+            if(p==0 && players[0].meleeWeapon.meleeTimer > 0){
+            ctx.drawImage(Images.characterMelee, 0+(10-players[p].meleeWeapon.meleeTimer)*Images.character.size,0,Images.character.size,Images.character.size,
+                          -16,-21,Images.character.size,Images.character.size);
+            }
+            else{
+            ctx.drawImage(Images.character, players[p].currentFrame*Images.character.size,p*Images.character.size,Images.character.size,Images.character.size,
+                          -16,-21,Images.character.size,Images.character.size);
+            }
+            
+            ctx.rotate(-players[p].playerFacing-Math.PI/2);
+           // ctx.translate(-Math.floor(players[0].pos.x),-Math.floor(players[0].pos.y));
+            ctx.translate(-(players[p].pos.x),-(players[p].pos.y));
+             //  ctx.fillCircle(players[0].pos.x,players[0].pos.y,2);
+            if(players[p].down){ctx.globalAlpha = 1;}
+        }
     }
-    else{
-    ctx.drawImage(Images.character, players[p].currentFrame*Images.character.size,p*Images.character.size,Images.character.size,Images.character.size,
-                  -16,-21,Images.character.size,Images.character.size);
-    }
-    ctx.rotate(-players[p].playerFacing-Math.PI/2);
-   // ctx.translate(-Math.floor(players[0].pos.x),-Math.floor(players[0].pos.y));
-    ctx.translate(-(players[p].pos.x),-(players[p].pos.y));
-     //  ctx.fillCircle(players[0].pos.x,players[0].pos.y,2);
-       if(players[p].down){ctx.globalAlpha = 1;}
-    }
-}
 //draw actions debug circles
-     ctx.globalAlpha=0.4;
-  for(var a = 0; a < map.actions.length;a++){
+    ctx.globalAlpha=0.4;
+
+    for(var a = 0; a < map.actions.length;a++){
         if(map.actions[a].debug == true){
             for(var t=0;t<map.actions[a].triggers.length;t++){
                 if(map.actions[a].triggers[t].floor == gameCamera.floor){
-                ctx.fillCircle(map.actions[a].triggers[t].pos.x,map.actions[a].triggers[t].pos.y,map.actions[a].triggers[t].radius);
+                    ctx.fillCircle(map.actions[a].triggers[t].pos.x,map.actions[a].triggers[t].pos.y,map.actions[a].triggers[t].radius);
                 }
             }
-       }
-   }
+         }
+    }
+
    ctx.globalAlpha=1;
 
 //draw zombies old sty
