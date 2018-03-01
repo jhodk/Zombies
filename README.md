@@ -1,7 +1,7 @@
 # Zombies
 2d top-down zombie shooter with local co-op multiplayer for 1-4 people using gamepads.
 
-Best viewed with Chrome: https://rawgit.com/EncounterQ/Zombies/master/raycasting.html
+Best viewed with Chrome: https://rawgit.com/EncounterQ/Zombies/master/zombies.html
 
 Inspired by Call of Duty World At War and Black Ops.
 
