@@ -2,6 +2,7 @@
 
 <html>
 <head>
+<title>Zombies - 2D Co-op Survival Shooter</title>
 <style>
 
 body {background-color:#000;
@@ -22,7 +23,29 @@ margin:2px;
 }
 #container2{}
 fps{color:white;}
-h1,h2{padding-top:1em;color:white;text-align:center;font-family:Courier;}
+h1,h3{padding-top:0.5em;color:white;text-align:center;font-family:Courier;}
+h2{color:gray;}
+
+#keys{margin:0 auto;width:350px;color:gray;text-align:center;font-family:Courier;}
+ul{text-align:left;}
+h2:hover{color:white;}
+input[type=checkbox]
+{
+  /* Double-sized Checkboxes */
+  -ms-transform: scale(2); /* IE */
+  -moz-transform: scale(2); /* FF */
+  -webkit-transform: scale(2); /* Safari and Chrome */
+  -o-transform: scale(2); /* Opera */
+  padding: 10px;
+}
+
+/* Might want to wrap a span around your checkbox text */
+.checkboxtext
+{
+  /* Checkbox text */
+  font-size: 110%;
+  display: inline;
+}
 
 </style>
 
@@ -30,7 +53,7 @@ h1,h2{padding-top:1em;color:white;text-align:center;font-family:Courier;}
 <body>
 <h1>
 <!--<div id='fps'></div></h1>-->
-<div id='container'>
+<div id='container' style="display:none">
 <canvas id='cvs' width=640px height=480px>Loading...</canvas>
 </div>
 <div id='container2'>
@@ -39,6 +62,7 @@ h1,h2{padding-top:1em;color:white;text-align:center;font-family:Courier;}
 
 <div id='menu'>
 <img width = 400 height = 134 src='images/logo.jpg'></img>
+<br><span style="color:#9a0300">2d Co-op Survival Shooter</span>
 <br>
 <img id='thumb' style="border:1px gray solid" width = 500 height = 370 src='images/maps/ndu/nduthumb.png'></img>
 <br>
@@ -52,9 +76,26 @@ Players: <span id='playercount'>1</span><br>
 <button type="button" onmousedown=selectPlayers(3);>3</button>
 <button type="button" onmousedown=selectPlayers(4);>4</button>
 <br>
+P1 uses controller? <input type="checkbox" id="p1controller" onclick="Sounds.playSprite('gunEmpty', 'short')"></input>
 <br>
-<a style="text-decoration:none;color:red" href='#' onclick=startGame();>Start Game</a>
+<a style="text-decoration:none;color:#9a0300" href='#' onclick=startGame();>Start Game</a>
 
+
+<br>
+</h1>
+
+<div onclick=toggleControls(); id = 'keys'>
+
+<h2>Controls</h2>
+<ul id='controllist' style='display:none'>
+<li><span>Move: WASD, Left Analog Stick</li>
+<li>Aim: Mouse, Right Analog Stick
+<li>Fire: Left Click, R1
+<li>Melee: C, Circle/R3
+<li>Reload: R, Square
+<li>Interact: E, L1
+<li>Switch Weapon: Q, Triangle
+</div>
 </div>
 <!--<script src="glfx.js"></script>-->
 <!--<script src="vfx.js"></script>-->
@@ -69,7 +110,6 @@ Players: <span id='playercount'>1</span><br>
 <script src="howler.js"></script>
 <script src="zombiesmain.js"></script>
 <script>
-document.getElementById('container').style.display = 'none';
 var menuPlayers = 1;
 var menuMap = 'ndu';
 function selectPlayers(n) {
@@ -83,11 +123,21 @@ function selectMap(m) {
 	Sounds.playSprite('gunEmpty', 'short');
 	document.getElementById('thumb').src = 'images/maps/' + m + '/' + m + 'thumb.png';
 }
+function toggleControls() {
+	list = document.getElementById('controllist');
+	if(list.style.display == ''){
+		list.style.display = 'none';
+	}
+	else{
+		list.style.display = '';
+	}
+}
 function startGame() {
 	document.getElementById('menu').style.display = 'none';
 	document.getElementById('container').style.display = '';
 	Sounds.playSound('raygunfire');
 	init(menuMap, menuPlayers);
+	KEYBOARD_INPUT = !document.getElementById('p1controller').checked;
 }
 </script>
 

@@ -12,7 +12,7 @@ for(var i = 0;i<4;i++){
 }
 function connecthandler(e) {
   addgamepad(e.gamepad);
-
+  //console.log('connecthandler');
 }
 
 function addgamepad(gamepad) {
@@ -46,12 +46,13 @@ function updateStatus() {
 
   var i = 0;
   var j;
-  var realGamepadIndex = 0;
+  //if p1 uses m+kb then start at 1
+  var realGamepadIndex = 0 + KEYBOARD_INPUT;
   for (j in controllers) {
       
     var controller = controllers[j];//fixes an issue with controllers being charged producing ghost controllers
     a = controller.index;
-    if(controller.timestamp !== 0 && !(realGamepadIndex==0 && KEYBOARD_INPUT==true) ){
+    if(controller.timestamp !== 0 && !(realGamepadIndex==0 && KEYBOARD_INPUT==true) && realGamepadIndex < NUM_PLAYERS){
       p = realGamepadIndex;
       //hopefully deals with ghost controllers
     /*for (i = 0; i < controller.buttons.length; i++) {
@@ -96,11 +97,20 @@ function updateStatus() {
        
         }*/
         //for(var p=0;p<NUM_PLAYERS;p++){
-          
+       if(runGame != undefined) {
+          if(runGame && runGame==true) {
+       
       if(buttonPressed(controller.buttons[2])){players[p].reload = true;}else{players[p].reload=false;}
       //if(buttonPressed(controller.buttons[4])){players[0].sprint = true;}else{players[0].sprint=false;}
       if(buttonPressed(controller.buttons[5]) && players[p].hasReleasedFire){players[p].fire = true;players[p].hasReleasedFire = false;}
       else if(!buttonPressed(controller.buttons[5])){players[p].hasReleasedFire = true;players[p].fire=false;}
+
+        if( (buttonPressed(controller.buttons[1]) || buttonPressed(controller.buttons[11])) && players[p].hasReleasedMelee){
+         players[p].melee = true; players[p].hasReleasedMelee = false;
+        }
+        else if(!(buttonPressed(controller.buttons[1]) || buttonPressed(controller.buttons[11]))){
+        players[p].hasReleasedMelee = true; players[p].melee = false;
+      }
 
       if(buttonPressed(controller.buttons[3]) && players[p].hasReleasedSwitch){players[p].nextWeapon();players[p].hasReleasedSwitch = false;}
       else if(!buttonPressed(controller.buttons[3])){players[p].hasReleasedSwitch = true;}
@@ -118,12 +128,15 @@ function updateStatus() {
 
     }
 
+  }
+}
 
     }
   requestAnimationFrame(updateStatus);
 }
 
 function scangamepads() {
+  
   var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
   for (var i = 0; i < gamepads.length; i++) {
     if (gamepads[i]) {

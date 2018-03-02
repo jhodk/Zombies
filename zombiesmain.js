@@ -3097,7 +3097,7 @@ var delta = 0;
 
 var w = 640, h = 480;
 
-var runGame = true;
+var runGame = false;
 var gameEnded = false;
 
 CanvasRenderingContext2D.prototype.fillCircle = function(xpos, ypos, radius) {
@@ -4203,8 +4203,8 @@ function renderAssets(context) {
             ctx.rotate(players[p].playerFacing + Math.PI / 2);
 
             //test rendering for melee attack
-            if(p == 0 && players[0].meleeWeapon.meleeTimer > 0) {
-                ctx.drawImage(Images.characterMelee, 0 + (10 - players[p].meleeWeapon.meleeTimer) * Images.character.size, 0, Images.character.size, Images.character.size, -16, -21, Images.character.size, Images.character.size);
+            if(players[p].meleeWeapon.meleeTimer > 0) {
+                ctx.drawImage(Images.characterMelee, 0 + (10 - players[p].meleeWeapon.meleeTimer) * Images.character.size, 32*p, Images.character.size, Images.character.size, -16, -21, Images.character.size, Images.character.size);
             } else {
                 ctx.drawImage(Images.character, players[p].currentFrame * Images.character.size, p * Images.character.size, Images.character.size, Images.character.size, -16, -21, Images.character.size, Images.character.size);
             }
