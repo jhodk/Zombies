@@ -1,3 +1,296 @@
+//begin sat additions
+class Polygon {
+    constructor(pos, points,floor=0) {
+        this.pos = new Vector();
+        this.points = points || [];
+        this.floor = floor;
+        this.enabled = true;
+        this.setPos(pos);
+    }
+    draw(context) {
+        
+        var points = this.points;
+        var i = points.length;
+        
+        //ctx.transform(1,0,0,1,this.pos.x,this.pos.y);
+
+        context.beginPath();
+        context.moveTo(points[0].x ,points[0].y);
+        while(i--) context.lineTo(points[i].x, points[i].y);
+        context.closePath();
+        //ctx.fillStyle = '#FF8800';
+        context.fill();
+        //if(fill){ctx.fillStyle = '#FF2222';ctx.fill();}
+        //ctx.stroke();
+        //ctx.transform(1,0,0,1,-this.pos.x,-this.pos.y)
+    }
+
+    setPos(pos) {
+        var diff = pos.Subtract(this.pos);
+        this.pos = pos;
+        for(var i = 0; i < this.points.length; i++) {
+            this.points[i].x += diff.x;
+            this.points[i].y += diff.y;
+        }
+    }
+
+     setType(type) {
+        this.type = type;
+        return this;
+    }
+
+     setId(id) {
+        this.id = id;
+        return this;
+    }
+
+}
+
+class Circle {
+
+    constructor(pos, radius) {
+        this.pos = pos || new Vector();
+        this.radius = radius || 5;
+    }
+
+    draw(fill = false) {
+        ctx.fillStyle = '#88AA00';
+        if(fill){ctx.fillCircle(this.pos.x,this.pos.y,this.radius);}
+        ctx.strokeCircle(this.pos.x,this.pos.y,this.radius);
+
+    }
+
+    setPos(pos) {
+        this.pos = pos;
+    }
+
+    setId(type) {
+        this.obstacles[this.obstacles.length-1].type = type;
+        return this.obstacles[this.obstacles.length-1];
+    }
+
+}
+//should combine with vector2d later
+class Vector {
+    constructor(x=0,y=0){
+        this.x = x;
+        this.y = y;
+    }
+    Subtract(v) {
+        return new Vector(this.x - v.x,this.y - v.y);
+    }
+    Unit() {
+        var m = this.Magnitude();
+        return new Vector(this.x/m, this.y/m);
+    }
+    Magnitude() {
+        return Math.sqrt(this.x**2 + this.y**2);
+    }
+    Normal() {
+        return new Vector(this.y, -this.x);
+    }
+    DotProduct(vec) {
+        return this.x*vec.x + this.y*vec.y;
+    }
+    Add(vec) {
+        return new Vector(this.x + vec.x, this.y + vec.y);
+    }
+    Multiply(val) {
+        return new Vector(this.x * val, this.y * val);
+    }
+
+}
+
+class Range {
+    constructor(a,b) {
+        this.Start = a < b ? a : b;
+        this.End = a < b ? b : a;
+    }
+    Length() {
+        return this.End - this.Start;
+    }
+    Intersect(other) {
+
+        var firstRange = this.Start < other.Start ? this : other;
+        var secondRange = firstRange == this ? other : this;
+        if(firstRange.End < secondRange.Start) {
+            return new Range(0,0);
+        }
+
+        return new Range(secondRange.Start,Math.min(firstRange.End,secondRange.End));
+    }
+}
+
+class ObstacleContainer {
+    constructor() {
+        this.obstacles = [];
+        this.interior = [[],[],[]];
+    }
+    Add(ob) {
+        this.obstacles.push(ob);
+        this.obstacles[this.obstacles.length-1].type = "";
+        return this.obstacles[this.obstacles.length-1];
+    }
+    AddInterior(ob) {
+        this.interior[ob.floor].push(ob);
+    }
+
+    GetObstaclesById(id) {
+        var results = [];
+        for(var i = 0; i < this.obstacles.length; i++) {
+            if(this.obstacles[i].id == id) {
+                results.push(this.obstacles[i]);
+            }
+        }
+        return results;
+    }
+
+}
+
+
+function jCirclePolyCollision(circle, poly) {
+    var circleRange;
+    var polyRange;
+    
+    //resolution
+    var smallestDisplacement = {vec: new Vector(), range: new Range(-Number.MAX_VALUE,Number.MAX_VALUE)};
+    //
+    //first check polygon normals, then check vector circle centre to closest vertex
+    var prevPoint = poly.points[0];
+    for(var i = 1; i < poly.points.length+1; i ++) {
+        var currentPoint = poly.points[i%poly.points.length];
+        var sideVector = currentPoint.Subtract(prevPoint);
+        var axisVector = sideVector.Unit().Normal();
+        //
+        //var displacementFromOrigin = axisVector.DotProduct(prevPoint);
+        //console.log(displacementFromOrigin);
+        //
+        //project each polygon's vertices along this axis
+        polyRange = ProjectOntoAxis(axisVector, poly);
+        circleRange = ProjectCircleOntoAxis(axisVector, circle);
+        /*if(i==4){console.log(circleRange);
+                    console.log(polyRange);
+                DisplayCollisionLine(axisVector);}*/
+               
+        var intersect = polyRange.Intersect(circleRange);
+        
+        if(intersect.Length() < 0.0001) {
+            //there exists a separating axis between the convex polygons, so no collision
+            return false;
+        }
+
+        //resolution
+        if(intersect.Length() < smallestDisplacement.range.Length()) {
+            //smallestDisplacement.vec = axisVector;
+            smallestDisplacement.range = intersect;
+
+            //choose axis direction that is closest to the side?
+            //smallestDisplacement.vec = Math.abs(axisVector.DotProduct(prevPoint)) < Math.abs(axisVector.Multiply(-1).DotProduct(prevPoint)) ? axisVector : axisVector.Multiply(-1);
+            //didn't work
+            //find each direction's distance along line 0 to prevpoint - choose one with highest displacement?
+            //temp solution - find largest projection along direction vector between the 2 shapes
+            //reoslves first object argument only
+            var n1 = axisVector.DotProduct(circle.pos.Subtract(poly.pos));
+            var n2 = axisVector.Multiply(-1).DotProduct(circle.pos.Subtract(poly.pos));
+            if(n1 < n2) {smallestDisplacement.vec = axisVector}
+                else{smallestDisplacement.vec = axisVector.Multiply(-1);}
+        }
+
+        prevPoint = currentPoint;
+    }
+
+    //find vertex closest to centre of circle
+    var closestVertex = 0;
+    for(var i = 0; i < poly.points.length; i++) {
+
+        if(circle.pos.Subtract(poly.points[i]).Magnitude() < circle.pos.Subtract(poly.points[closestVertex]).Magnitude()) {
+            closestVertex = i;
+        }
+    }
+    
+    //check this axis
+    var circAxis = circle.pos.Subtract(poly.points[closestVertex]);
+    polyRange = ProjectOntoAxis(circAxis, poly);
+    circleRange = ProjectCircleOntoAxis(circAxis, circle);
+    var intersect = polyRange.Intersect(circleRange);
+
+    if(intersect.Length() < 0.0001) {
+        //there exists a separating axis between the convex polygons, so no collision
+        return false;
+    }
+
+    /*ctx.beginPath();
+    ctx.moveTo(circle.pos.x,circle.pos.y);
+    ctx.lineTo(poly.points[closestVertex].x,poly.points[closestVertex].y);
+    ctx.stroke();
+    ctx.closePath();*/
+    //resolution
+    if(intersect.Length() < smallestDisplacement.range.Length()) {
+        //smallestDisplacement.vec = axisVector;
+        smallestDisplacement.range = intersect;
+
+        //choose axis direction that is closest to the side?
+        //smallestDisplacement.vec = Math.abs(axisVector.DotProduct(prevPoint)) < Math.abs(axisVector.Multiply(-1).DotProduct(prevPoint)) ? axisVector : axisVector.Multiply(-1);
+        //didn't work
+        //find each direction's distance along line 0 to prevpoint - choose one with highest displacement?
+        //temp solution - find largest projection along direction vector between the 2 shapes
+        //reoslves first object argument only
+        var n1 = axisVector.DotProduct(circle.pos.Subtract(poly.pos));
+        var n2 = axisVector.Multiply(-1).DotProduct(circle.pos.Subtract(poly.pos));
+        if(n1 < n2) {smallestDisplacement.vec = axisVector}
+            else{smallestDisplacement.vec = axisVector.Multiply(-1);}
+    }
+    
+    //can cause NaN error if duplicate points are in polygon - need unique points otherwise the vector is (0,
+    return {result:true,displacement:smallestDisplacement};
+}
+
+
+function ProjectOntoAxis(axisVec, obj, org=new Vector()) {
+    var max = -Number.MAX_VALUE;
+    var min = Number.MAX_VALUE;
+    axisVec = axisVec.Subtract(org).Unit();
+    for(var i = 0; i<obj.points.length; i++){
+        var currentPoint = obj.points[i];
+
+        //var projectionSize = axisVec.DotProduct(currentPoint);
+        var projectionSize = currentPoint.Subtract(org).DotProduct(axisVec);
+        if(projectionSize < min) {min = projectionSize;}
+        if(projectionSize > max) {max = projectionSize};
+
+    }
+
+    return new Range(min,max);
+}
+
+function ProjectCircleOntoAxis(axisVec, circ, org = new Vector()) {
+
+    var max = -Number.MAX_VALUE;
+    var min = Number.MAX_VALUE;
+    axisVec = axisVec.Subtract(org).Unit();
+    
+    var currentPoint = circ.pos.Add(axisVec.Multiply(circ.radius));
+    //var projectionSize = axisVec.DotProduct(currentPoint);
+    var projectionSize = currentPoint.Subtract(org).DotProduct(axisVec);
+    if(projectionSize < min) {min = projectionSize;}
+    if(projectionSize > max) {max = projectionSize};
+
+    currentPoint = circ.pos.Subtract(axisVec.Multiply(circ.radius));
+    //var projectionSize = axisVec.DotProduct(currentPoint);
+    var projectionSize = currentPoint.Subtract(org).DotProduct(axisVec);
+    if(projectionSize < min) {min = projectionSize;}
+    if(projectionSize > max) {max = projectionSize};
+    
+
+    return new Range(min,max);
+
+}
+
+
+
+/// end sat additions
+
+
 class Vector2D {
     constructor(x = 0, y = 0) {
         this.x = x;
@@ -135,9 +428,74 @@ class Tile {
             this.passable = false;
             this.walkable = false;
             this.shootThrough = true;
+        } else if(a == 'A') {
+            a = 'windowAttractor';
+            this.passable = true;
+            this.walkable = true;
+            this.shootThrough = true;
+        } else if(a==' ') {
+            a = 'air';
+            this.passable = false;
+            this.walkable = false;
         }
-
         this.type = a;
+    }
+}
+
+class WindowInstance {
+    constructor(id) {
+        this.id = id || "";
+        this.health = 140;
+        this.maxHealth = 140;
+        this.readyToBeHit = true;
+        this.readyToBeRepaired = true;
+        this.repairCount = 0;
+        this.newlyPlacedImmunity = false;
+        //console.log(this.id, this.health);
+    }
+    damage(val) {
+        if(this.readyToBeHit && !this.newlyPlacedImmunity) {
+        this.health -= val;
+        //console.log(this.health, this.id);
+        if(this.health <= 0) {Sounds.playSound('windowsmash');}
+        else {Sounds.playSound('windowhit'+(Math.floor(Math.random()*3)+1));}
+        //add scope to setTimeout
+        var self = this;
+        this.readyToBeHit = false;
+        //console.log(self);
+
+       
+        setTimeout((function(){this.readyToBeHit = true;}).bind(this),2000+Math.random()*1000);
+        }
+    }
+
+    repair() {
+        if(this.readyToBeRepaired && this.health < this.maxHealth) {
+            this.repairCount++;
+            this.readyToBeRepaired = false;
+            Sounds.playSound('windowrepair' + (1+Math.floor(Math.random()*3)));
+            if(this.health <= 0) {
+                this.newlyPlacedImmunity = true;
+                setTimeout((function(){this.newlyPlacedImmunity = false;}).bind(this),2000);
+            }
+            this.health = Math.min(this.health + this.maxHealth/7, this.maxHealth);
+            setTimeout((function(){this.readyToBeRepaired = true;}).bind(this),1200);
+
+            return true;
+        }
+        return false;
+    }
+    getHitsLeft() {
+        return Math.floor(this.health/20);
+    }
+}
+
+class DoorInstance {
+    constructor(id, graphics) {
+        this.id = id;
+        this.graphics = graphics || [];
+        this.active = true;
+        //{image, x, y, floor}
     }
 }
 
@@ -216,12 +574,12 @@ class Raytrace {
 
         var tDeltaX = Math.abs(tileSize / v.x);
         var tDeltaY = Math.abs(tileSize / v.y);
-
+       
         var collisionPoint = new Vector2D();
         var allowedCollisions = 1;
         var currentCollisions = 0;
         while(!(X == endTileX) || !(Y == endTileY)) {
-            if(tMaxX < tMaxY) {
+            if((tMaxX < tMaxY && Math.abs(tDeltaX) < Infinity) || Math.abs(tDeltaY) == Infinity) {
                 tMaxX += tDeltaX;
                 X += stepX;
 
@@ -255,7 +613,7 @@ class Raytrace {
                         return collisionPoint;
                     }
                 }
-            } else {
+            } else if(Math.abs(tDeltaY) < Infinity){
                 tMaxY += tDeltaY;
                 Y += stepY;
                 var stop = false;
@@ -500,11 +858,38 @@ class Camera {
         this.x = 0;
         this.y = 0;
         this.bounds = {};
+        this.prevxs = [0,0,0,0];
+        this.prevys = [0,0,0,0];
     }
-    follow(obj) {
-        this.x = obj.pos.x - w / 2;
-        this.y = obj.pos.y - h / 2;
+    follow(obj,p) {
+        //this.x = obj.pos.x - w / 2;
+        //this.y = obj.pos.y - h / 2;
+        this.x = this.prevxs[p];
+        this.y = this.prevys[p];
+        //want smooth panning to borders so will do some horrible code duplication to bound the target position
+        var targx = obj.pos.x - w / 2;
+        var targy = obj.pos.y - h / 2;
+
+        if(targx > (this.bounds.x + this.bounds.w) * tileSize - w) {
+            targx = (this.bounds.x + this.bounds.w) * tileSize - w;
+        }
+        if(targx < this.bounds.x * tileSize) {
+            targx = this.bounds.x * tileSize;
+        }
+
+        if(targy > (this.bounds.y + this.bounds.h) * tileSize - h) {
+            targy = (this.bounds.y + this.bounds.h) * tileSize - h;
+        }
+        if(targy < this.bounds.y * tileSize) {
+            targy = this.bounds.y * tileSize;
+        }
+
+
+        this.x += 0.04*((targx)-this.x);
+        this.y += 0.04*((targy)-this.y);
         this.floor = obj.currentFloor;
+        this.prevxs[p] = this.x;
+        this.prevys[p] = this.y;
         this.constrainBounds();
     }
     setBoundingRect(rect) {
@@ -539,14 +924,19 @@ class ProximityAction {
         this.tooltip = '';
         this.singleUse = false;
         this.price = 0;
-        this.type = 'gun';
+        this.reward = 0;
+        this.type = '';
         this.gunName = '';
         // this.floor = 0;
         this.doorCoords = [];
         this.teleportConditions = {};
         this.triggers = [];
         this.customFunction = function() {};
+        this.tooltipFunction = function() {return "";};
+
         this.id = '';
+        this.windowId = '';
+        this.doorId = '';
 
         //this.id = '';
     }
@@ -580,10 +970,19 @@ class ProximityAction {
         this.price = p;
     }
     setGunName(n) {
+        this.setType('gun');
         this.gunName = n;
     }
     setType(t) {
         this.type = t;
+        if(t == 'window') {
+            this.tooltipFunction = function() {
+                    return " (" + getMapClass().getWindowById(this.windowId).getHitsLeft() + "/7)";
+            };
+            this.customFunction = function() {
+            return getMapClass().getWindowById(this.windowId).repair();
+            };
+        }
     }
     addDoorCoord(x, y, f, type = ',') {
         this.doorCoords.push({
@@ -603,87 +1002,142 @@ class ProximityAction {
     }
 }
 
+class Powerup {
+    constructor(x,y,f) {
+        this.pos = new Vector(x,y);
+        this.floor = f;
+        this.dropped = true;
+        this.type = "";
+        this.rotation = Math.random() * Math.PI * 0.5;
+        this.lifeLeft = 30;
+        this.timer = setInterval((function() {
+            this.lifeLeft -= 0.25;
+            if(this.lifeLeft == 0) {
+                clearTimeout(this.timer);
+                this.dropped = false;
+            }
+        }).bind(this),250);
+        var r = Math.random();
+        //r = 0.2;
+        //carpenter should only spawn if there are 5 or more breached barricades
+        var step = roundManager.getDestroyedBarricades() >= 5 ? 0.2 : 0.25;
+        if(r < step) {this.type = '2xp';}
+        else if(r < 2*step){this.type = 'ik';}
+        else if(r < 3*step){this.type = 'nuke';}
+        else if(r < 4*step){this.type = 'ma';}
+        else {this.type = 'carpenter';}
+    }
+
+    activate() {
+        this.dropped = false;
+        roundManager.activatePowerup(this.type);
+    }
+}
+
 class Maps {
     static getName(abbr) {
-        var names = {ndu: "Nacht der Untöten",vkt: "Verrückt"};
+        var names = {ndu: "Nacht der Untöten",vkt: "Verrückt", test: "Test Map", five: "FIVE"};
         return names[abbr];
     }
     constructor() {
         this.maps = [];
 
+
         /// map ndu
+
+    // 888b    888                   888      888             888                      888     888          888             888                      
+    // 8888b   888                   888      888             888                      888     888          888             888                      
+    // 88888b  888                   888      888             888                      888     888          888             888                      
+    // 888Y88b 888  8888b.   .d8888b 88888b.  888888      .d88888  .d88b.  888d888     888     888 88888b.  888888  .d88b.  888888  .d88b.  88888b.  
+    // 888 Y88b888     "88b d88P"    888 "88b 888        d88" 888 d8P  Y8b 888P"       888     888 888 "88b 888    d88""88b 888    d8P  Y8b 888 "88b 
+    // 888  Y88888 .d888888 888      888  888 888        888  888 88888888 888         888     888 888  888 888    888  888 888    88888888 888  888 
+    // 888   Y8888 888  888 Y88b.    888  888 Y88b.      Y88b 888 Y8b.     888         Y88b. .d88P 888  888 Y88b.  Y88..88P Y88b.  Y8b.     888  888 
+    // 888    Y888 "Y888888  "Y8888P 888  888  "Y888      "Y88888  "Y8888  888          "Y88888P"  888  888  "Y888  "Y88P"   "Y888  "Y8888  888  888 
+                                                                                                                                                  
+  
+
         this.maps['ndu'] = {
             width: 40,
             height: 29,
             floors: 2,
             floor: [{
-                    data: '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
+                data:   '........................................' +
+                        '.......FFFF.............................' +
+                        '...........FF...........FFF.............' +
+                        '.............F.........F................' +
+                        '..............F.......F.................' +
+                        '..............F......F..................' +
+                        '............A.F..A....F.A...............' +
                         '..........XXWXXXXWXXXXXFWXXXXXXXXXXXXX..' +
-                        '..........X,,,,X,,,,,,,,,,X----XXXXX-X..' +
-                        '..........X,,,,X,,,,,,,,,,X----X---XDX..' +
+                        '..FFF.....X,,,,X,,,,,,,,,,X----XXXXX-X..' +
+                        '.....FFFFFX,,,,X,,,,,,,,,,X----X---XDX..' +
                         '..........X,,,,,,,,,,,,,,,D----------X..' +
                         '..........X,,,,,,X-XX,X,X,X--------XXX..' +
-                        '..........W,,,,,,XD-X,,,,,X--------XXX..' +
-                        '..........XXXXXWXXXXXXXXXXXX-------X....' +
-                        '...................XX.,,XXXX-------W....' +
-                        '...................XX.XXXXXX---X---W....' +
-                        '...........................X-------X....' +
-                        '...........................W-------X....' +
-                        '...........................X---X---X....' +
-                        '...........................X-------X....' +
-                        '...........................X-------X....' +
-                        '...........................W---X---X....' +
+                        '.........AW,,,,,,XD-X,,,,,X--------XXX..' +
+                        '..........XXXXXWXXXXXXXXXXXX-------XXXXX' +
+                        '.........F.....A...XX.,,XXXX-------WA...' +
+                        '........F........FFXX.XXXX.X---X---WA...' +
+                        '.......F.......FF......F...X-------XX...' +
+                        '......F.......FF......F...AW-------XX...' +
+                        '.....F.......F.......F.....X---X---XX...' +
+                        '............F.......F...FFFX-------XX...' +
+                        '...........................X-------XX...' +
+                        '..........................AW---X---XXXXX' +
                         '...........................X-------X....' +
                         '...........................XXXXXXWXX....' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
+                        '..............................F..A.F....' +
+                        '.............................F.....F....' +
+                        '.............................F.....F....' +
+                        '............................F.......F...' +
                         '........................................'
                 },
 
                 {
-                    data: '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '..........XXXXXXXXXXXXXXXXXXXXXXXXXXXX..' +
-                        '..........XXX..X,,,,,,,,,,X----------X..' +
-                        '..........X....XB,,,,,,,,,X--------XDX..' +
-                        '..........X....XBBB,,,,,,,,--------XBX..' +
-                        '..........XX...XBBB,,,,,,,X--------XXX..' +
-                        '..........XXX..XBBD-,,,,,,X--------XXX..' +
-                        '..........XXXXXXXXXXWXXXXXXX-------X....' +
-                        '...................,,BVV,,,W-------X....' +
-                        '...................,,,,,,,,X---X---X....' +
-                        '...........................X-------X....' +
-                        '...........................X-------W....' +
-                        '...........................X---X---X....' +
-                        '...........................X-------X....' +
-                        '...........................X---X-XXX....' +
-                        '...........................X---X---W....' +
-                        '...........................X-------X....' +
-                        '...........................XXXXXXWXX....' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................' +
-                        '........................................'
+                    data: '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '          XXXXXXXXXXXXXXXXXXXXXXXXXXXX  ' +
+                        '          XXX  X,,,,,,,,,,X----------X  ' +
+                        '          X    XB,,,,,,,,,X--------XDX  ' +
+                        '          X    XBBB,,,,,,,,--------XBX  ' +
+                        '          XX   XBBB,,,,,,,X--------XXX  ' +
+                        '          XXX  XBBD-,,,,,,X--------XXX  ' +
+                        '          XXXXXXXXXXWXXXXXXX-------X    ' +
+                        '                  F,ABVV,FAW-------X    ' +
+                        '                  F,,,,,,F,X---X---X    ' +
+                        '                  FFFFFFFF X-------X    ' +
+                        '                           X-------WA   ' +
+                        '                           X---X---X    ' +
+                        '                           X-------XFFFF' +
+                        '                           X---X-XXX    ' +
+                        '                           X---X---WA   ' +
+                        '                           X-------X    ' +
+                        '                           XXXXXXWXX    ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        ' +
+                        '                                        '
                 }
             ]
         };
         this.maps['ndu'].actions = [];
         this.maps['ndu'].teleportPoints = [];
         this.maps['ndu'].spawnPoints = [];
+        this.maps['ndu'].windows = [];
+        this.maps['ndu'].doors = [];
+        this.maps['ndu'].powerups = [];
+        this.maps['ndu'].zombieSpawns = [{x:288,y:24,f:0,enabled:true},
+                                         {x:384,y:24,f:0,enabled:true},
+                                         {x:576,y:8,f:0,enabled:true},
+                                         {x:896,y:32,f:0,enabled:true},
+                                         {x:64,y:392,f:0,enabled:true},
+                                         {x:88,y:744,f:0,enabled:true},
+                                         {x:368,y:912,f:0,enabled:true}];
         this.maps['ndu'].spawnPoints.push({
             x: 22.5 * tileSize,
             y: 9.5 * tileSize,
@@ -705,6 +1159,176 @@ class Maps {
             floor: 0
         });
 
+        //windows - floor 0
+        this.maps['ndu'].windows.push(new WindowInstance('1'));
+        var act = new ProximityAction();
+        act.windowId = '1';
+        act.reward = 10;
+        act.addTrigger(12.5 * tileSize, 7.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('2'));
+        var act = new ProximityAction();
+        act.windowId = '2';
+        act.reward = 10;
+        act.addTrigger(17.5 * tileSize, 7.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+
+        this.maps['ndu'].windows.push(new WindowInstance('3'));
+        var act = new ProximityAction();
+        act.windowId = '3';
+        act.reward = 10;
+        act.addTrigger(24.5 * tileSize, 7.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('4'));
+        var act = new ProximityAction();
+        act.windowId = '4';
+        act.reward = 10;
+        act.addTrigger(35.5 * tileSize, 14.5 * tileSize, 0, tileSize/2);
+        act.addTrigger(35.5 * tileSize, 15.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('5'));
+        var act = new ProximityAction();
+        act.windowId = '5';
+        act.reward = 10;
+        act.addTrigger(33.5 * tileSize, 23.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('6'));
+        var act = new ProximityAction();
+        act.windowId = '6';
+        act.reward = 10;
+        act.addTrigger(27.5 * tileSize, 21.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('7'));
+        var act = new ProximityAction();
+        act.windowId = '7';
+        act.reward = 10;
+        act.addTrigger(27.5 * tileSize, 17.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('8'));
+        var act = new ProximityAction();
+        act.windowId = '8';
+        act.reward = 10;
+        act.addTrigger(15.5 * tileSize, 13.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('9'));
+        var act = new ProximityAction();
+        act.windowId = '9';
+        act.reward = 10;
+        act.addTrigger(10.5 * tileSize, 12.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+
+        //windows - floor 1
+        this.maps['ndu'].windows.push(new WindowInstance('10'));
+        var act = new ProximityAction();
+        act.windowId = '10';
+        act.reward = 10;
+        act.addTrigger(35.5 * tileSize, 17.5 * tileSize, 1, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('11'));
+        var act = new ProximityAction();
+        act.windowId = '11';
+        act.reward = 10;
+        act.addTrigger(35.5 * tileSize, 21.5 * tileSize, 1, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('12'));
+        var act = new ProximityAction();
+        act.windowId = '12';
+        act.reward = 10;
+        act.addTrigger(27.5 * tileSize, 14.5 * tileSize, 1, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+        this.maps['ndu'].windows.push(new WindowInstance('13'));
+        var act = new ProximityAction();
+        act.windowId = '13';
+        act.reward = 10;
+        act.addTrigger(20.5 * tileSize, 13.5 * tileSize, 1, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['ndu'].actions.push(act);
+
+
+        //if this is our map, block windows that shouldn't be accessed at the start
+        if(MAP_NAME == 'ndu'){
+            this.setTileType('F',35,14,0,'N');
+            this.setTileType('F',35,15,0,'N');
+            this.setTileType('F',33,23,0,'N');
+            this.setTileType('F',27,21,0,'N');
+            this.setTileType('F',27,17,0,'N'); 
+        }
 
         //help room door
         var act = new ProximityAction();
@@ -713,8 +1337,18 @@ class Maps {
         act.price = 1000;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'help_door';
         act.addDoorCoord(26, 10, 0);
+        //allow zombie pathing to help room
+        act.customFunction = function() {
+            getMapClass().setTileType('W',35,14,0);
+            getMapClass().setTileType('W',35,15,0);
+            getMapClass().setTileType('W',33,23,0);
+            getMapClass().setTileType('W',27,21,0);
+            getMapClass().setTileType('W',27,17,0); 
+        }
         this.maps['ndu'].actions.push(act);
+        this.maps['ndu'].doors.push(new DoorInstance('help_door', [{image: Images.door_small, x: 26 * tileSize, y: 10 * tileSize, floor: 0}]));
 
         //start stairs door
         var act = new ProximityAction();
@@ -724,9 +1358,13 @@ class Maps {
         act.price = 1000;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'ascend_stairs_door';
         act.addDoorCoord(18, 12, 0, '-');
         act.addDoorCoord(18, 12, 1, 'V');
         this.maps['ndu'].actions.push(act);
+        this.maps['ndu'].doors.push(new DoorInstance('ascend_stairs_door', [{image: Images.door_small, x: 18 * tileSize, y: 12 * tileSize, floor: 0},
+                                                                            {image: Images.door_small, x: 18 * tileSize, y: 12 * tileSize, floor: 1}]));
+
 
         //help room stairs door
         var act = new ProximityAction();
@@ -736,9 +1374,21 @@ class Maps {
         act.price = 1000;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'help_stairs_door';
         act.addDoorCoord(36, 9, 0, '-');
         act.addDoorCoord(36, 9, 1, 'V');
+        //allow zombie pathing to help room
+        act.customFunction = function() {
+            getMapClass().setTileType('W',35,14,0);
+            getMapClass().setTileType('W',35,15,0);
+            getMapClass().setTileType('W',33,23,0);
+            getMapClass().setTileType('W',27,21,0);
+            getMapClass().setTileType('W',27,17,0); 
+        }
         this.maps['ndu'].actions.push(act);
+        this.maps['ndu'].doors.push(new DoorInstance('help_stairs_door', [{image: Images.door_small, x: 36 * tileSize, y: 9 * tileSize, floor: 0},
+                                                                            {image: Images.door_small, x: 36 * tileSize, y: 9 * tileSize, floor: 1}]));
+
 
         act = new ProximityAction();
         act.addTrigger(20.5 * tileSize, 8 * tileSize, 0, .75 * tileSize);
@@ -754,6 +1404,12 @@ class Maps {
         act.price = 1200;
         this.maps['ndu'].actions.push(act);
 
+        act = new ProximityAction();
+        act.addTrigger(30 * tileSize, 23 * tileSize, 0, .75 * tileSize);
+        act.setTooltip('Buy Double-Barreled Shotgun [$1200]');
+        act.setGunName('doublebarreled');
+        act.price = 1200;
+        this.maps['ndu'].actions.push(act);
 
         act = new ProximityAction();
         act.addTrigger(15 * tileSize, 9.5 * tileSize, 0, .5 * tileSize);
@@ -764,9 +1420,18 @@ class Maps {
 
         act = new ProximityAction();
         act.addTrigger(28.5 * tileSize, 9.5 * tileSize, 0, .5 * tileSize);
-        act.setGunName('raygun');
-        act.setTooltip('Open Mystery Box [$5000]');
-        act.price = 5000;
+        act.setTooltip('Open Mystery Box [$950]');
+        act.setType('mysteryboxbuy');
+        act.price = 950;
+        act.id = 'mb1';
+        this.maps['ndu'].actions.push(act);
+
+        act = new ProximityAction();
+        act.addTrigger(28.5 * tileSize, 9.5 * tileSize, 0, 0);
+        act.setTooltip('Pick up ');
+        act.setType('mysteryboxgun');
+        act.id = 'mb1gun';
+        act.price = 0;
         this.maps['ndu'].actions.push(act);
 
         //help room stairs
@@ -801,7 +1466,7 @@ class Maps {
             destFloor: act.teleportConditions.floor
         })
 
-        //outside stairs
+        //outside stairs left
         var act = new ProximityAction();
         act.addTrigger(23.5 * tileSize, 14.5 * tileSize, 0, .5 * tileSize);
         act.setTooltip('');
@@ -820,6 +1485,38 @@ class Maps {
 
         var act = new ProximityAction();
         act.addTrigger(22.5 * tileSize, 14.5 * tileSize, 1, .5 * tileSize);
+        act.setTooltip('');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('teleport');
+        act.setTeleportDestination(0);
+        this.maps['ndu'].actions.push(act);
+        this.maps['ndu'].teleportPoints.push({
+            x: act.triggers[0].pos.x,
+            y: act.triggers[0].pos.y,
+            floor: act.triggers[0].floor,
+            destFloor: act.teleportConditions.floor
+        })
+
+        //outside stairs right
+        var act = new ProximityAction();
+        act.addTrigger(26.5 * tileSize, 15 * tileSize, 0, .5 * tileSize);
+        act.setTooltip('');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('teleport');
+        act.setTeleportDestination(1);
+        this.maps['ndu'].actions.push(act);
+        this.maps['ndu'].teleportPoints.push({
+            x: act.triggers[0].pos.x,
+            y: act.triggers[0].pos.y,
+            floor: act.triggers[0].floor,
+            destFloor: act.teleportConditions.floor
+        })
+
+
+        var act = new ProximityAction();
+        act.addTrigger(26.5 * tileSize, 16 * tileSize, 1, .5 * tileSize);
         act.setTooltip('');
         act.price = 0;
         act.setSingleUse(false);
@@ -858,7 +1555,7 @@ class Maps {
         act.setType('teleport');
         act.setTeleportDestination(0);
         this.maps['ndu'].actions.push(act);
-        console.log(act.triggers[0].floor)
+        //console.log(act.triggers[0].floor)
         this.maps['ndu'].teleportPoints.push({
             x: act.triggers[0].pos.x,
             y: act.triggers[0].pos.y,
@@ -869,7 +1566,7 @@ class Maps {
         //
 
         //upstairs
-        act = new ProximityAction();
+        var act = new ProximityAction();
         act.addTrigger(36.5 * tileSize, 8 * tileSize, 1, .5 * tileSize);
         act.setTooltip('Buy BAR [$1800]');
         act.price = 1800;
@@ -878,15 +1575,27 @@ class Maps {
 
         //vkt
 
+    // 888     888                                            888      888    
+    // 888     888                                            888      888    
+    // 888     888                                            888      888    
+    // Y88b   d88P  .d88b.  888d888 888d888 888  888  .d8888b 888  888 888888 
+    //  Y88b d88P  d8P  Y8b 888P"   888P"   888  888 d88P"    888 .88P 888    
+    //   Y88o88P   88888888 888     888     888  888 888      888888K  888    
+    //    Y888P    Y8b.     888     888     Y88b 888 Y88b.    888 "88b Y88b.  
+    //     Y8P      "Y8888  888     888      "Y88888  "Y8888P 888  888  "Y888 
+                                                                       
+                                                                       
+                                                                       
+
         this.maps['vkt'] = {
             width: 80,
-            height: 80,
+            height: 47,
             floors: 2,
 
             //80x80
             floor: [ //floor 0 
                 {
-                    data: '................................................................................' +
+                  data: '................................................................................' +
                         '................................................................................' +
                         '................................................................................' +
                         '................................................................................' +
@@ -932,44 +1641,11 @@ class Maps {
                         '................................................................................' +
                         '................................................................................' +
                         '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
                         '................................................................................'
                 },
                 //floor 1
                 {
-                    data: '................................................................................' +
+                  data: '................................................................................' +
                         '................................................................................' +
                         '................................................................................' +
                         '................................................................................' +
@@ -1015,46 +1691,17 @@ class Maps {
                         '................................................................................' +
                         '................................................................................' +
                         '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
-                        '................................................................................' +
                         '................................................................................'
                 }
             ]
         };
 
         this.maps['vkt'].teleportPoints = [];
+        this.maps['vkt'].actions = [];
         this.maps['vkt'].spawnPoints = [];
+        this.maps['vkt'].windows = [];
+        this.maps['vkt'].powerups = [];
+        this.maps['vkt'].doors = [];
         this.maps['vkt'].spawnPoints.push({
             x: 22.5 * tileSize,
             y: 24.5 * tileSize,
@@ -1078,9 +1725,153 @@ class Maps {
 
 
         //actions
-        this.maps['vkt'].actions = [];
+       
+       //downstairs
 
-        //downstairs
+       //windows
+        this.maps['vkt'].windows.push(new WindowInstance('1'));
+        var act = new ProximityAction();
+        act.windowId = '1';
+        act.reward = 10;
+        act.addTrigger(15.5 * tileSize, 7.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('2'));
+        var act = new ProximityAction();
+        act.windowId = '2';
+        act.reward = 10;
+        act.addTrigger(8.5 * tileSize, 16.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('3'));
+        var act = new ProximityAction();
+        act.windowId = '3';
+        act.reward = 10;
+        act.addTrigger(8.5 * tileSize, 22.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('4'));
+        var act = new ProximityAction();
+        act.windowId = '4';
+        act.reward = 10;
+        act.addTrigger(21.5 * tileSize, 36.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('5'));
+        var act = new ProximityAction();
+        act.windowId = '5';
+        act.reward = 10;
+        act.addTrigger(28.5 * tileSize, 38.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('6'));
+        var act = new ProximityAction();
+        act.windowId = '6';
+        act.reward = 10;
+        act.addTrigger(31.5 * tileSize, 29.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('7'));
+        var act = new ProximityAction();
+        act.windowId = '7';
+        act.reward = 10;
+        act.addTrigger(36.5 * tileSize, 29.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('8'));
+        var act = new ProximityAction();
+        act.windowId = '8';
+        act.reward = 10;
+        act.addTrigger(25.5 * tileSize, 27.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('9'));
+        var act = new ProximityAction();
+        act.windowId = '9';
+        act.reward = 10;
+        act.addTrigger(29.5 * tileSize, 18.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('10'));
+        var act = new ProximityAction();
+        act.windowId = '10';
+        act.reward = 10;
+        act.addTrigger(25.5 * tileSize, 15.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('11'));
+        var act = new ProximityAction();
+        act.windowId = '11';
+        act.reward = 10;
+        act.addTrigger(28.5 * tileSize, 11.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('12'));
+        var act = new ProximityAction();
+        act.windowId = '12';
+        act.reward = 10;
+        act.addTrigger(46.5 * tileSize, 16.5 * tileSize, 0, tileSize/2);
+        //act.debug = true;
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
 
         //left room
         act = new ProximityAction();
@@ -1123,9 +1914,13 @@ class Maps {
         act.price = 1000;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'north_stairs';
         act.addDoorCoord(20, 8, 0, '-');
         act.addDoorCoord(20, 8, 1, 'V');
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('north_stairs', [{image: Images.door_small, x: 20 * tileSize, y: 8 * tileSize, floor: 0},
+                                                                      {image: Images.door_small, x: 20 * tileSize, y: 8 * tileSize, floor: 1}]));
+
         //up tp
         var act = new ProximityAction();
         act.addTrigger(21.5 * tileSize, 8.5 * tileSize, 0, 0.5 * tileSize);
@@ -1163,9 +1958,13 @@ class Maps {
         act.price = 750;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'south_room';
         act.addDoorCoord(21, 29, 0);
         act.addDoorCoord(22, 29, 0);
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('south_room', [{image: Images.door_small, x: 21 * tileSize, y: 29 * tileSize, floor: 0},
+                                                                    {image: Images.door_small, x: 22 * tileSize, y: 29 * tileSize, floor: 0}]));
+
 
         //right back room
         var act = new ProximityAction();
@@ -1174,16 +1973,20 @@ class Maps {
         act.price = 750;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'pap_room'
         act.addDoorCoord(15, 25, 0);
         act.addDoorCoord(16, 25, 0);
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('pap_room', [{image: Images.door_small, x: 15 * tileSize, y: 25 * tileSize, floor: 0},
+                                                                    {image: Images.door_small, x: 16 * tileSize, y: 25 * tileSize, floor: 0}]));
 
-        act = new ProximityAction();
-        act.addTrigger(15 * tileSize, 32.5 * tileSize, 1, .75 * tileSize);
+
+        var act = new ProximityAction();
+        act.addTrigger(15 * tileSize, 32.5 * tileSize, 0, .75 * tileSize);
         act.setTooltip('Buy BAR [$1800]');
         act.price = 1800;
         act.setGunName('BAR')
-        this.maps['ndu'].actions.push(act);
+        this.maps['vkt'].actions.push(act);
 
         //right hallway stairs
         var act = new ProximityAction();
@@ -1193,11 +1996,17 @@ class Maps {
         act.price = 1000;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'south_room_stairs'
         act.addDoorCoord(36, 35, 0, '-');
         act.addDoorCoord(37, 35, 0, '-');
         act.addDoorCoord(36, 35, 1, '-');
         act.addDoorCoord(37, 35, 1, '-');
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('south_room_stairs', [{image: Images.door_small, x: 36 * tileSize, y: 35 * tileSize, floor: 0},
+                                                                    {image: Images.door_small, x: 37 * tileSize, y: 35 * tileSize, floor: 0},
+                                                                    {image: Images.door_small, x: 36 * tileSize, y: 35 * tileSize, floor: 1},
+                                                                    {image: Images.door_small, x: 37 * tileSize, y: 35 * tileSize, floor: 1}]));
+
 
         //up tp
         var act = new ProximityAction();
@@ -1245,6 +2054,97 @@ class Maps {
 
         //upstairs
 
+        //windows
+        this.maps['vkt'].windows.push(new WindowInstance('13'));
+        var act = new ProximityAction();
+        act.windowId = '13';
+        act.reward = 10;
+        act.addTrigger(33.5 * tileSize, 4.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('14'));
+        var act = new ProximityAction();
+        act.windowId = '14';
+        act.reward = 10;
+        act.addTrigger(54.5 * tileSize, 5.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('15'));
+        var act = new ProximityAction();
+        act.windowId = '15';
+        act.reward = 10;
+        act.addTrigger(56.5 * tileSize, 27.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('16'));
+        var act = new ProximityAction();
+        act.windowId = '16';
+        act.reward = 10;
+        act.addTrigger(53.5 * tileSize, 38.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('17'));
+        var act = new ProximityAction();
+        act.windowId = '17';
+        act.reward = 10;
+        act.addTrigger(20.5 * tileSize, 36.5 * tileSize, 1, tileSize/2);
+        act.addTrigger(20.5 * tileSize, 37.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);
+
+        this.maps['vkt'].windows.push(new WindowInstance('18'));
+        var act = new ProximityAction();
+        act.windowId = '18';
+        act.reward = 10;
+        act.addTrigger(19.5 * tileSize, 25.5 * tileSize, 1, tileSize/2);
+        act.addTrigger(20.5 * tileSize, 25.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);    
+
+        this.maps['vkt'].windows.push(new WindowInstance('19'));
+        var act = new ProximityAction();
+        act.windowId = '19';
+        act.reward = 10;
+        act.addTrigger(42.5 * tileSize, 28.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);  
+
+        this.maps['vkt'].windows.push(new WindowInstance('20'));
+        var act = new ProximityAction();
+        act.windowId = '20';
+        act.reward = 10;
+        act.addTrigger(40.5 * tileSize, 15.5 * tileSize, 1, tileSize/2);
+        act.setTooltip('Repair barricade');
+        act.price = 0;
+        act.setSingleUse(false);
+        act.setType('window');
+        this.maps['vkt'].actions.push(act);  
+
         //left door 1
         var act = new ProximityAction();
         act.addTrigger(34.5 * tileSize, 7.5 * tileSize, 1, tileSize);
@@ -1252,11 +2152,14 @@ class Maps {
         act.price = 750;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'upstairs_left_door_1';
         act.addDoorCoord(33, 7, 1, ',');
         act.addDoorCoord(34, 7, 1, ',');
         act.addDoorCoord(35, 7, 1, ',');
         this.maps['vkt'].actions.push(act);
-
+        this.maps['vkt'].doors.push(new DoorInstance('upstairs_left_door_1', [{image: Images.door_small, x: 33 * tileSize, y: 7 * tileSize, floor: 1},
+                                                                              {image: Images.door_small, x: 34 * tileSize, y: 7 * tileSize, floor: 1},
+                                                                              {image: Images.door_small, x: 35 * tileSize, y: 7 * tileSize, floor: 1}]));
         //power room door left
         var act = new ProximityAction();
         act.addTrigger(46.5 * tileSize, 12.5 * tileSize, 1, tileSize);
@@ -1264,10 +2167,14 @@ class Maps {
         act.price = 750;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'left_power_room_door';
         act.addDoorCoord(45, 12, 1, ',');
         act.addDoorCoord(46, 12, 1, ',');
         act.addDoorCoord(47, 12, 1, ',');
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('left_power_room_door', [{image: Images.door_small, x: 45 * tileSize, y: 12 * tileSize, floor: 1},
+                                                                              {image: Images.door_small, x: 46 * tileSize, y: 12 * tileSize, floor: 1},
+                                                                              {image: Images.door_small, x: 47 * tileSize, y: 12 * tileSize, floor: 1}]));
 
         //power room door right
         var act = new ProximityAction();
@@ -1276,10 +2183,14 @@ class Maps {
         act.price = 750;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'right_power_room_door';
         act.addDoorCoord(45, 20, 1, ',');
         act.addDoorCoord(46, 20, 1, ',');
         act.addDoorCoord(47, 20, 1, ',');
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('right_power_room_door', [{image: Images.door_small, x: 45 * tileSize, y: 20 * tileSize, floor: 1},
+                                                                               {image: Images.door_small, x: 46 * tileSize, y: 20 * tileSize, floor: 1},
+                                                                               {image: Images.door_small, x: 47 * tileSize, y: 20 * tileSize, floor: 1}]));
 
         //turning on the power (open spawn door)
         //make a new decal layer with lighting?
@@ -1289,12 +2200,16 @@ class Maps {
         act.price = 0;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'power_door';
         act.addDoorCoord(20, 20, 0, ',');
         act.addDoorCoord(21, 20, 0, ',');
         act.customFunction = function() {
             getActionsById('spawnDoorTooltip')[0].triggers[0].radius = 0;
         }
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('power_door', [{image: Images.door_small, x: 20 * tileSize, y: 20 * tileSize, floor: 0},
+                                                                    {image: Images.door_small, x: 21 * tileSize, y: 20 * tileSize, floor: 0}]));
+
 
 
         //right door 2
@@ -1304,9 +2219,12 @@ class Maps {
         act.price = 1000;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'upstairs_right_door_2';
         act.addDoorCoord(53, 30, 1, ',');
         act.addDoorCoord(54, 30, 1, ',');
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('upstairs_right_door_2', [{image: Images.door_small, x: 53 * tileSize, y: 30 * tileSize, floor: 1},
+                                                                               {image: Images.door_small, x: 54 * tileSize, y: 30 * tileSize, floor: 1}]));
 
         //right door 1
         var act = new ProximityAction();
@@ -1315,9 +2233,12 @@ class Maps {
         act.price = 750;
         act.setSingleUse(true);
         act.setType('door');
+        act.doorId = 'upstairs_right_door_1';
         act.addDoorCoord(42, 32, 1, ',');
         act.addDoorCoord(42, 33, 1, ',');
         this.maps['vkt'].actions.push(act);
+        this.maps['vkt'].doors.push(new DoorInstance('upstairs_right_door_1', [{image: Images.door_small, x: 42 * tileSize, y: 32 * tileSize, floor: 1},
+                                                                               {image: Images.door_small, x: 42 * tileSize, y: 33 * tileSize, floor: 1}]));
 
 
         //outside
@@ -1428,6 +2349,100 @@ class Maps {
         })
 
 
+        //FIVE
+    // 8888888888 d8b                   
+    // 888        Y8P                   
+    // 888                              
+    // 8888888    888 888  888  .d88b.  
+    // 888        888 888  888 d8P  Y8b 
+    // 888        888 Y88  88P 88888888 
+    // 888        888  Y8bd8P  Y8b.     
+    // 888        888   Y88P    "Y8888  
+
+        this.maps['five'] = {
+            width: 32,
+            height: 32,
+            floors: 1,
+            floor: [{
+                   data:',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,' +
+                        ',,,,,,XXX,,,,,,,,,X,,,,,,,,,,,,,' +
+                        ',,,,,,XFF,,XX,,,,,X,,XXXX,,,,,,,' +
+                        ',,,,,,XF,,,,X,,,,,X,,XF,,,,,,,,,' +
+                        ',,,,,,X,,,,,XFFFF,X,,X,,,,,,,,,,' +
+                        ',,,,,,X,,,,,XFFFF,X,,X,XX,,,,,,,' +
+                        ',,,,,,XWXXXXXXXXXWXXXXWXXXXX,,,,' +
+                        ',,,,,,X-----------------X,,X,,,,' +
+                        ',,,,,,X-----X------------,,X,,,,' +
+                        ',,,,,,X-----------------X,,X,,,,' +
+                        ',,,,,,XX-XFFFFX-XXXXFFXWXXXX,,,,' +
+                        ',,,,,,X,,,,,,,,,,,,X,,X---X,,,,,' +
+                        ',,,,,,W,,,,,,,,,,,,W,,X---X,,,,,' +
+                        ',,,,,,X,FF,,FFFF,X,X,,XX--X,,,,,' +
+                        ',,,,,,X,FF,,FFFF,,,X,,,,--X,,,,,' +
+                        ',,,,,,X,FF,,FFFF,,,X,,,,--X,,,,,' +
+                        ',,,,,,X,FF,,FFF,,,,X,,,,--X,,,,,' +
+                        ',,,,,,X,FF,,FFF,,,,X,,,,--X,,,,,' +
+                        ',,,,,,X,FF,,FFF,,,,X,,,,--X,,,,,' +
+                        ',,,,,,X,,F,,FFF,,X,X,,,,--X,,,,,' +
+                        ',,,,,,W,,,,,,,,,,,,W,,,,--,,,,,,' +
+                        ',,,,,,X,,,,,,,,,,,,X,,,,--,,,,,,' +
+                        ',,,,,XXXX-XFFFFFX-XXX,,,--,,,,,,' + 
+                        ',,,,,,,X------------X,,,--,,,,,,' +
+                        ',,,,,,,X--------X---X,,,--,,,,,,' +
+                        ',,,,,,,X------------X,,,--,,,,,,' +
+                        ',,,,,,,XXWXXXXXXXXWXX,,,--,,,,,,' +
+                        ',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,' +
+                        ',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,' +
+                        ',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,' +
+                        ',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,' +
+                        ',,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,'
+                }/*,
+
+                {
+                   data:'........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '..........XXXXXXXXXXXXXXXXXXXXXXXXXXXX..' +
+                        '..........XXX..X,,,,,,,,,,X----------X..' +
+                        '..........X....XB,,,,,,,,,X--------XDX..' +
+                        '..........X....XBBB,,,,,,,,--------XBX..' +
+                        '..........XX...XBBB,,,,,,,X--------XXX..' +
+                        '..........XXX..XBBD-,,,,,,X--------XXX..' +
+                        '..........XXXXXXXXXXWXXXXXXX-------X....' +
+                        '...................,,BVV,,,W-------X....' +
+                        '...................,,,,,,,,X---X---X....' +
+                        '...........................X-------X....' +
+                        '...........................X-------W....' +
+                        '...........................X---X---X....' +
+                        '...........................X-------X....' +
+                        '...........................X---X-XXX....' +
+                        '...........................X---X---W....' +
+                        '...........................X-------X....' +
+                        '...........................XXXXXXWXX....' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................' +
+                        '........................................'
+                }*/
+            ]
+        };
+        this.maps['five'].actions = [];
+        this.maps['five'].teleportPoints = [];
+        this.maps['five'].spawnPoints = [];
+        this.maps['five'].windows = [];
+        this.maps['five'].powerups = [];
+        this.maps['five'].doors = [];
+        this.maps['five'].spawnPoints.push({
+            x: 22.5 * tileSize,
+            y: 9.5 * tileSize,
+            floor: 0
+        });
+
 
 
         //test map
@@ -1444,8 +2459,8 @@ class Maps {
                         '......XXFXFXXXX.....' +
                         '......F,,,,,,,X.....' +
                         '...XWXX,,,,,,,X.....' +
-                        '...F..F,,,,,,,X.....' +
-                        '...XXXX,,S,,FFX.....' +
+                        '...F..W,,,,,,,X.....' +
+                        '...XXXX,,,,,FFX.....' +
                         '......F,,,,,--X.....' +
                         '......XXFXFXXXX.....' +
                         '....................' +
@@ -1459,11 +2474,11 @@ class Maps {
                         '....................' +
                         '....................' +
                         '......XXXXXXXXX.....' +
-                        '......F,,F,,F,X.....' +
-                        '...XXXX,F,,,,,X.....' +
-                        '...XXXXF,,,,,,X.....' +
-                        '...XXXX,F,,XX-X.....' +
-                        '......F,,F,X--X.....' +
+                        '......F,,,,,,,X.....' +
+                        '...XXXX,,,,,,,X.....' +
+                        '...XXXX,,,,,,,X.....' +
+                        '...XXXX,,,,XX-X.....' +
+                        '......F,,,,X--X.....' +
                         '......XXFXFXXXX.....' +
                         '....................' +
                         '....................' +
@@ -1474,6 +2489,14 @@ class Maps {
         };
 
         this.maps['test'].actions = [];
+        this.maps['test'].teleportPoints = [];
+        this.maps['test'].spawnPoints = [];
+        this.maps['test'].windows = [];
+        this.maps['test'].spawnPoints.push({
+            x: 11.5 * tileSize,
+            y: 7.5 * tileSize,
+            floor: 0
+        });
         var act = new ProximityAction();
         act.addTrigger(13.5 * tileSize, 9.5 * tileSize, 0, .5 * tileSize);
         act.setTooltip('');
@@ -1482,6 +2505,12 @@ class Maps {
         act.setType('teleport');
         act.setTeleportDestination(1);
         this.maps['test'].actions.push(act);
+        this.maps['test'].teleportPoints.push({
+            x: act.triggers[0].pos.x,
+            y: act.triggers[0].pos.y,
+            floor: act.triggers[0].floor,
+            destFloor: act.teleportConditions.floor
+        })
 
 
         var act = new ProximityAction();
@@ -1492,6 +2521,38 @@ class Maps {
         act.setType('teleport');
         act.setTeleportDestination(0);
         this.maps['test'].actions.push(act);
+        this.maps['test'].teleportPoints.push({
+            x: act.triggers[0].pos.x,
+            y: act.triggers[0].pos.y,
+            floor: act.triggers[0].floor,
+            destFloor: act.teleportConditions.floor
+        })
+
+        //windows
+        //this.maps['test'].windows.push(new WindowInstance('one'));
+        //console.log(this.maps['test'].windows);
+
+
+
+        //player revive triggers
+        //hopefully in correct order for tooltips
+        for(var i = NUM_PLAYERS-1; i >= 0; i--) {
+            var act = new ProximityAction();
+            act.setTooltip('Revive player ' + (i+1));
+            act.id = 'revive_player_' + i;
+            act.setType('revive');
+            act.addTrigger(-100,-100,-1,0);
+            
+            this.maps[MAP_NAME].actions.push(act);
+        }
+
+        /* act = new ProximityAction();
+        act.addTrigger(21 * tileSize, 20.5 * tileSize, 0, tileSize);
+        act.setTooltip('Requires Power');
+        act.price = Infinity;
+        act.setType('tooltip');
+        act.id = 'spawnDoorTooltip';
+        this.maps['vkt'].actions.push(act);*/
 
 
     }
@@ -1499,6 +2560,30 @@ class Maps {
     getMap() {
         return this.maps[MAP_NAME];
     }
+
+    setTileType(type,x,y,f,zPath='Y') {
+        this.getMap().floor[f].data = this.getMap().floor[f].data.substring(0, this.getMap().width * y + x) + type + this.getMap().floor[f].data.substring(this.getMap().width * y + x + 1);
+        if(dijkstraMap) {  
+           dijkstraMap.map.floor[f].data = dijkstraMap.map.floor[f].data.substring(0, this.getMap().width * y + x) + zPath + dijkstraMap.map.floor[f].data.substring(map.width * y + x + 1);
+        }
+    }
+
+    getWindowById(id) {
+        for(var i = 0; i < this.getMap().windows.length; i++) {
+            if(this.getMap().windows[i].id == id) {
+                return this.getMap().windows[i];
+            }
+        }
+    }
+
+    getDoorById(id) {
+        for(var i = 0; i < this.getMap().doors.length; i++) {
+            if(this.getMap().doors[i].id == id) {
+                return this.getMap().doors[i];
+            }
+        }
+    }
+
 }
 
 class RoundManager {
@@ -1509,8 +2594,13 @@ class RoundManager {
         this.zombiesSpawned = 0;
         this.totalZombieKills = 0;
 
+        this.powerups = {};
+        this.powerups.doublePoints = {enabled: false, timer: 0, interval: null};
+        this.powerups.instaKill = {enabled: false, timer: 0, interval: null};
+        this.powerupsSpawned = 0; //counter for each round
+
         //this reference is lost with setInterval, .bind(this) works!!
-        this.timer = setInterval(this.spawnZombies.bind(this), 1000);
+        this.timer = window.setInterval(this.spawnZombies.bind(this), 1000);
     }
 
     getRound() {
@@ -1522,6 +2612,7 @@ class RoundManager {
             this.round++;
             this.zombiesKilled = 0;
             this.zombiesSpawned = 0;
+            this.powerupsSpawned = 0;
 
             Sounds.playSound('nextround');
 
@@ -1529,11 +2620,20 @@ class RoundManager {
                 if(players[p].down == true) {
                     players[p].health = players[p].maxHealth;
                     players[p].down = false;
+                    players[p].dead = false;
+                    players[p].currentReviver = -1;
+                    getActionsById('revive_player_' + p)[0].triggers[0].radius = 0;
+
                     players[p].currentWeapon = 0;
                     players[p].weapon = null;
                     players[p].weaponsList = [];
                     players[p].addWeapon('M1911');
 
+                }
+                //reset repair money limit each round
+                players[p].roundRepairMoney = 0;
+                for(var i = 0; i < getMap().windows.length; i++) {
+                    getMapClass().getWindowById(getMap().windows[i].id).repairCount = 0;
                 }
             }
 
@@ -1542,14 +2642,113 @@ class RoundManager {
 
 
     }
+
+    getDestroyedBarricades() {
+        var count = 0;
+        for(var i = 0; i < getMap().windows.length; i++) {
+            if(getMap().windows[i].health <= 0) {count++;}
+        }
+       // console.log(count);
+        return count;
+    }
+
+    numActivePowerups() {
+        return this.powerups.doublePoints.enabled + this.powerups.instaKill.enabled;
+    }
+
+    activatePowerup(name) {
+        if(name == '2xp') {
+            //console.log('activate double points');
+            //double points
+            Sounds.playSound('dppickup');
+            this.powerups.doublePoints.timer = 30;
+            if(!this.powerups.doublePoints.enabled) {
+                this.powerups.doublePoints.enabled = true;
+                this.powerups.doublePoints.interval = 
+                setInterval((function() {
+                    this.powerups.doublePoints.timer -= 0.25;
+                 //   console.log(this.powerups.doublePoints.timer);
+                    if(this.powerups.doublePoints.timer == 0) {
+                        this.powerups.doublePoints.enabled = false;
+                        Sounds.playSound('dpexpired');
+                        clearTimeout(this.powerups.doublePoints.interval);
+                    }
+                }).bind(this), 250);
+
+            }
+        }
+
+        if(name == 'ik') {
+            //console.log('activate instakill');
+            //double points
+            Sounds.playSound('ikpickup');
+            this.powerups.instaKill.timer = 30;
+            if(!this.powerups.instaKill.enabled) {
+                this.powerups.instaKill.enabled = true;
+                this.powerups.instaKill.interval = 
+                setInterval((function() {
+                    this.powerups.instaKill.timer -= 0.25;
+                   // console.log(this.powerups.doublePoints.timer);
+                    if(this.powerups.instaKill.timer == 0) {
+                        this.powerups.instaKill.enabled = false;
+                        Sounds.playSound('ikexpired');
+                        clearTimeout(this.powerups.instaKill.interval);
+                    }
+                }).bind(this), 250);
+
+            }
+        }
+
+        if(name == 'ma') {
+            //console.log('activate max ammo');
+            //double points
+            //todo: only fill primary weapon of downed player (wiki)
+            Sounds.playSound('mapickup');
+            for(var p = 0; p < players.length; p++) {
+                for(var i = 0; i < players[p].weaponsList.length; i++) {
+                    players[p].weaponsList[i].currentReserve = players[p].weaponsList[i].maxAmmo;
+                }
+            }
+            
+        }
+
+        if(name == 'nuke') {
+            Sounds.playSound('nukepickup');
+            for(var p = 0; p < players.length; p++) {
+                if(players[p].down == false) {
+                    players[p].money += 400 * (1 + roundManager.powerups.doublePoints.enabled);
+                }
+            }
+            for(var z = 0; z < zombies.length; z++) {
+                if(zombies[z].alive) {
+                    zombies[z].kill('nuke');
+                    roundManager.addZombieKill();
+                }
+            }
+        }
+
+        if(name == 'carpenter') {
+            Sounds.playSound('carpenterpickup');
+            for(var i = 0; i < getMap().windows.length; i++) {
+                getMap().windows[i].health = getMap().windows[i].maxHealth;
+            }
+            for(var p = 0; p < players.length; p++) {
+                if(players[p].down == false) {
+                    players[p].money += 200 * (1 + roundManager.powerups.doublePoints.enabled);
+                }
+            }
+        }
+    }
+
     addZombieKill() {
         this.totalZombieKills++;
         this.zombiesKilled++;
+       // console.log(this.zombiesKilled);
         if(this.zombiesKilled == this.getZombieCount(this.round, NUM_PLAYERS)) {
             setTimeout(function() {
                 Sounds.playSound('endround');
             }, 750);
-            setTimeout(this.nextRound.bind(this), 5000);
+            setTimeout(this.nextRound.bind(this), 10000);
         }
     }
     getZombieHealth(a) {
@@ -1563,10 +2762,13 @@ class RoundManager {
         return(24 + (pcount - 1) * 6);
     }
     spawnZombies(yes = true) {
-        //small error at start of earlier rounds, maybe until reached 24 zombies for the firrst time?
+
+        //small error at start of earlier rounds, maybe until reached 24 zombies for the first time?
         if(yes) {
             var max = this.getMaxZombies(NUM_PLAYERS);
-
+           // console.log('max zombies on screen', max);
+            //console.log('max this round: ' + this.getZombieCount(this.round, NUM_PLAYERS));
+            //console.log('total this round: ' +this.zombiesSpawned);
             if(this.zombiesSpawned < this.getZombieCount(this.round, NUM_PLAYERS) && this.zombiesSpawned - this.zombiesKilled < max) {
                 //we need additional zombies
                 for(var z = 0; z < getZombies().length; z++) {
@@ -1575,10 +2777,19 @@ class RoundManager {
                         getZombies()[z].health = this.getZombieHealth(this.round);
                         this.zombiesSpawned++;
 
+                        if(getMap().zombieSpawns) {
+                        var newSpawn = chooseZombieSpawn();
+                        getZombies()[z].pos.x = newSpawn.x;
+                        getZombies()[z].pos.y = newSpawn.y;
+                        getZombies()[z].floor = newSpawn.floor;
+                    }
+                       // console.log('spawned zombie ' + z);
+                        break; //try adding only 1 zombie per call
                         //we spawned a new zombie, stop loop if we have enough for now
-                        if(this.zombiesSpawned == this.getZombieCount(this.round, NUM_PLAYERS)) {
-                            z = getZombies().length; //exit the for loop
-                        }
+                       /* if(this.zombiesSpawned == this.getZombieCount(this.round, NUM_PLAYERS)) {
+                            //z = getZombies().length; //exit the for loop
+                            break; //exit loop properly
+                        }*/
 
                     }
                 }
@@ -1712,6 +2923,13 @@ class SoundManager {
         });
 
 
+        this.sounds['doublebarreledfire'] = new Howl({
+            src: ['audio/doublebarreledfire.mp3'],
+            html5: true,
+            buffer: true,
+            volume: 0.25
+        });
+
         this.sounds['gunEmpty'] = new Howl({
             src: ['audio/gunempty.mp3'],
             html5: true,
@@ -1729,7 +2947,7 @@ class SoundManager {
         this.sounds['purchase'] = new Howl({
             src: ['audio/purchase.wav'],
             html5: true,
-            volume: 0.5
+            volume: 0.2
         });
 
         this.sounds['endround'] = new Howl({
@@ -1759,8 +2977,92 @@ class SoundManager {
             volume: 0.5
         });
 
+        this.sounds['windowhit1'] = new Howl({
+            src: ['audio/windowhit1.mp3'],
+            html5: true,
+            volume: 0.15
+        });
+        this.sounds['windowhit2'] = new Howl({
+            src: ['audio/windowhit2.mp3'],
+            html5: true,
+            volume: 0.8
+        });
+        this.sounds['windowhit3'] = new Howl({
+            src: ['audio/windowhit3.mp3'],
+            html5: true,
+            volume: 0.8
+        });
+        this.sounds['windowsmash'] = new Howl({
+            src: ['audio/windowsmash.mp3'],
+            html5: true,
+            volume: 0.25
+        });
+        this.sounds['windowrepair1'] = new Howl({
+            src: ['audio/windowrepair1.mp3'],
+            html5: true,
+            volume: 0.15
+        });
+        this.sounds['windowrepair2'] = new Howl({
+            src: ['audio/windowrepair2.mp3'],
+            html5: true,
+            volume: 0.15
+        });
+        this.sounds['windowrepair3'] = new Howl({
+            src: ['audio/windowrepair3.mp3'],
+            html5: true,
+            volume: 0.15
+        });
+
+        this.sounds['ikpickup'] = new Howl({
+            src: ['audio/ikbegin.wav'],
+            html5: true,
+            volume: 0.5
+        });
+        this.sounds['ikexpired'] = new Howl({
+            src: ['audio/ikend.wav'],
+            html5: true,
+            volume: 0.5
+        });
+        this.sounds['mapickup'] = new Howl({
+            src: ['audio/mapickup.wav'],
+            html5: true,
+            volume: 0.5
+        });
+        this.sounds['nukepickup'] = new Howl({
+            src: ['audio/nukepickup.wav'],
+            html5: true,
+            volume: 1
+        });
+        this.sounds['dppickup'] = new Howl({
+            src: ['audio/dppickup.wav'],
+            html5: true,
+            volume: 0.35
+        });
+        this.sounds['dpexpired'] = new Howl({
+            src: ['audio/dpend.wav'],
+            html5: true,
+            volume: 0.35
+        });
+        this.sounds['carpenterpickup'] = new Howl({
+            src: ['audio/carpenterpickup.mp3'],
+            html5: true,
+            volume: 0.5
+        });
+        this.sounds['dooropen'] = new Howl({
+            src: ['audio/dooropen.mp3'],
+            html5: true,
+            volume: 1
+        });
+        this.sounds['mysterybox'] = new Howl({
+            src: ['audio/mysterybox.mp3'],
+            html5: true,
+            volume: 0.5
+        });
+
+
     }
     playSound(str, seekT = 0) {
+        //return;
         if(seekT == 0) {
             this.sounds[str].play();
         } else {
@@ -1828,6 +3130,10 @@ class ImageManager {
         this.door.src = "images/door.jpg";
         this.door.size = 32;
 
+        this.door_small = new Image();
+        this.door_small.src = "images/door_small.jpg";
+        this.door_small.size = 32;
+
         this.carpet = new Image();
         this.carpet.src = "images/carpet.jpg";
         this.carpet.size = 32;
@@ -1853,11 +3159,39 @@ class ImageManager {
         this.hpbar = new Image();
         this.hpbar.src = "images/healthbar.png";
 
+        this.bleedoutbar = new Image();
+        this.bleedoutbar.src = "images/bleedoutbar.png";
+
         this.reloadIndicator = new Image();
         this.reloadIndicator.src = "images/reloadindicator.png";
 
         this.reviveIndicator = new Image();
         this.reviveIndicator.src = "images/reviveindicator.png";
+        //powerups - ground
+        this.powerupGlow = new Image();
+        this.powerupGlow.src = "images/powerupglow.png";
+
+        this.doublePoints = new Image();
+        this.doublePoints.src = "images/doublepoints.png";
+
+        this.instaKill = new Image();
+        this.instaKill.src = "images/instakill.png";
+
+        this.maxAmmo = new Image();
+        this.maxAmmo.src = "images/maxammo.png";
+
+        this.nuke = new Image();
+        this.nuke.src = "images/nuke.png";
+
+        this.carpenter = new Image();
+        this.carpenter.src = "images/carpenter.png";
+
+        //powerups - hud
+        this.doublePointsHud = new Image();
+        this.doublePointsHud.src = "images/huddoublepoints.png";
+
+        this.instaKillHud = new Image();
+        this.instaKillHud.src = "images/hudinstakill.png";
 
         this.floorDecals = [];
         this.wallDecals = [];
@@ -1882,7 +3216,7 @@ class ImageManager {
         this.floorDecals['vkt'][0] = new Image();
         this.floorDecals['vkt'][0].src = 'images/maps/vkt/floor_decals_0.png';
         this.floorDecals['vkt'][1] = new Image();
-        this.floorDecals['vkt'][1].src = 'images/maps/vkt/floor_decals_0.png';
+        this.floorDecals['vkt'][1].src = 'images/maps/vkt/floor_decals_1.png';
         this.wallDecals['vkt'] = [];
         this.wallDecals['vkt'][0] = new Image();
         this.wallDecals['vkt'][0].src = 'images/maps/vkt/wall_decals_0.png';
@@ -1890,6 +3224,27 @@ class ImageManager {
         this.wallDecals['vkt'][1].src = 'images/maps/vkt/wall_decals_1.png';
 
 
+        //five
+        this.floorDecals['five'] = [];
+        this.floorDecals['five'][0] = new Image();
+        this.floorDecals['five'][0].src = 'images/maps/five/floor_decals_0.png';
+
+        this.wallDecals['five'] = [];
+        this.wallDecals['five'][0] = new Image();
+        this.wallDecals['five'][0].src = 'images/maps/five/wall_decals_0.png';
+
+        //test
+        this.floorDecals['test'] = [];
+        this.floorDecals['test'][0] = new Image();
+        this.floorDecals['test'][0].src = 'images/maps/ndu/floor_decals_0.png';
+        this.floorDecals['test'][1] = new Image();
+        this.floorDecals['test'][1].src = 'images/maps/ndu/floor_decals_1.png';
+
+        this.wallDecals['test'] = [];
+        this.wallDecals['test'][0] = new Image();
+        this.wallDecals['test'][0].src = 'images/maps/ndu/wall_decals_0.png';
+        this.wallDecals['test'][1] = new Image();
+        this.wallDecals['test'][1].src = 'images/maps/ndu/wall_decals_1.png';
 
         // this.ndu_decal_floor = new Image();
         // this.ndu_decal_floor.src = 'images/maps/ndu-map-decals-floor.png';
@@ -1917,23 +3272,68 @@ class ImageManager {
     }
 }
 
-class Player {
+class MysteryBoxManager {
     constructor() {
+        this.rewards = ['M1911', 'Kar98k', 'M1Carbine', 'M1Thompson', 'raygun', 'BAR', 'doublebarreled'];
+        this.defaultboxid = 'mb1';
+        this.currentboxid = this.defaultboxid;
+        this.numBoxes = 1;
+        this.lastUser = 0; //used so that only the player who purchases a weapon can pick it up
+        this.currentWeaponObj = 0; //used to hold a weapon object to use both internal and pretty names
+        this.expirationTimer = 0;
+    }
+    setupBox() {
+        getActionsById(this.currentboxid)[0].triggers[0].radius = 0.5*tileSize;
+    }
+    purchase(p) {
+        Sounds.playSound('mysterybox');
+        getActionsById(this.currentboxid)[0].triggers[0].radius = 0;
+        var mbreference = this.currentboxid + 'gun';
+        this.lastUser = p;
+        //enable gun pickup trigger after a few seconds
+        setTimeout((function() {this.spawnGunPickup();}).bind(this), 4500);
+    }
+
+    chooseGunName() {
+        this.currentWeaponObj = new Weapon(this.rewards[Math.floor(Math.random() * this.rewards.length)]);
+        return this.currentWeaponObj.internalName;
+    }
+
+    spawnGunPickup() {
+        var act = getActionsById(this.currentboxid+'gun')[0];
+        act.triggers[0].radius = 0.5 * tileSize;
+        act.owner = this.lastUser;
+        this.chooseGunName();
+        act.gunName = this.currentWeaponObj.internalName;
+        act.tooltip = 'Pick up ' + this.currentWeaponObj.name;
+        this.expirationTimer = setTimeout((function(){this.endCycle()}).bind(this),8000);
+    }
+
+    endCycle() {
+        clearTimeout(this.expirationTimer); //stop this timer in case player picked the weapon up to avoid any weirdness
+        getActionsById(this.currentboxid + 'gun')[0].triggers[0].radius = 0;
+        setTimeout((function(){this.setupBox()}).bind(this), 3000);
+    }
+}
+
+class Player {
+    constructor(id = -1) {
         this.pos = new Vector2D();
         this.angleFacing = 0;
-        this.speed = 2;
+        this.speed = 1.7;
         this.hasReleasedFire = true;
         this.hasReleasedSwitch = true;
         this.fire = false;
         this.action = false;
         this.sprint = false;
-        this.referenceRay = new Vector2D();
+        this.referenceRay = [new Vector2D()];
         this.shootInterval = 0;
         this.health = 100;
         this.maxHealth = 100;
         this.reload = false;
         this.displayTooltip = '';
         this.money = 0;
+        this.roundRepairMoney = 0;
         this.weaponsList = [];
         this.maxWeapons = 2;
         this.currentWeapon = 0;
@@ -1943,6 +3343,7 @@ class Player {
         this.ray = [new Vector2D(), new Vector2D()];
         this.origin = new Vector2D();
         this.down = false;
+        this.dead = false;
         this.currentFrame = 0;
         this.maxFrames = 4;
         this.moving = false;
@@ -1950,11 +3351,16 @@ class Player {
         this.noclip = false;
         this.isMeleeing = false;
         this.melee = false;
+        this.id = id;
+        this.currentReviver = -1;
+       
 
         this.meleeWeapon = new MeleeWeapon('knife');
         this.meleeWeapon.setParentPlayer(this);
     }
     nextWeapon() {
+
+     
         if(this.weaponsList.length > 1) {
             this.hasReleasedFire = false;
             this.fire = false;
@@ -1965,7 +3371,10 @@ class Player {
                 this.currentWeapon = 0;
             }
             this.weapon = this.weaponsList[this.currentWeapon];
+            
         }
+        //show name on hud
+            this.weapon.weaponSwitchTimer = 90;
     }
     addWeapon(name) {
         if(this.weaponsList.length == this.maxWeapons || this.weaponsList.length == 0) {
@@ -1979,6 +3388,7 @@ class Player {
                 this.nextWeapon();
             }
         }
+        this.weapon.weaponSwitchTimer = 90;
     }
     hasWeapon(name) {
         for(var i = 0; i < this.weaponsList.length; i++) {
@@ -1991,7 +3401,7 @@ class Player {
     damage(amount) {
         if(!this.godmode) {
             this.health -= amount;
-            if(this.health <= 0) {
+            if(this.health <= 0 && this.down == false) {
                 this.downPlayer();
             }
         }
@@ -1999,10 +3409,14 @@ class Player {
 
     downPlayer() {
         this.down = true;
+        this.health = 100;
+        this.reviveMeter = 0;
         this.weapon.reloading = false;
         this.weapon.reloadTimer = 0;
         this.money = Math.round(this.money * 0.95);
-
+        //assume it exists
+        var act = getActionsById('revive_player_' + this.id)[0];
+        act.triggers[0] = {pos: this.pos, floor: this.currentFloor, radius: 10};
     }
 }
 
@@ -2018,6 +3432,7 @@ class MeleeWeapon {
         this.currentAngle = 0;
         this.parentPlayer = {};
         this.hitList = [];
+        this.maxTargets = 1;
         if(type == 'knife') {
             this.type = type;
             this.damage = 135;
@@ -2069,22 +3484,23 @@ class MeleeWeapon {
         //check if already hit
         //increment angle
         var oldLength = this.hitList.length;
-
+        
         for(var j = 0; j < 3; j++) {
             var list = Raytrace.collideList(this.parentPlayer.pos, Vector2D.project(this.parentPlayer.pos, this.currentAngle, this.range), getZombies(), this.parentPlayer.currentFloor);
 
             for(var i = 0; i < list.length; i++) {
                 if(!this.hitList.includes(list[i])) {
-                    this.hitList.push(list[i]);
+                   
+                    if(this.hitList.length < this.maxTargets) {   
+                        this.hitList.push(list[i]);
+                        //console.log('hit on ',this.meleeTimer);
+                        drawBloodAt(getZombies()[this.hitList[this.hitList.length - 1]].pos.x, getZombies()[this.hitList[this.hitList.length - 1]].pos.y, getZombies()[this.hitList[this.hitList.length - 1]].currentFloor);
 
+                        // canvasBuffer.getContext('2d').globalAlpha = 1;
+                        // bufferctx.globalCompositeOperation = 'source-over';
+                        getZombies()[this.hitList[this.hitList.length - 1]].takeDamage(this.parentPlayer, 1, 'melee', this.damage);
 
-                    //console.log('hit on ',this.meleeTimer);
-                    drawBloodAt(getZombies()[this.hitList[this.hitList.length - 1]].pos.x, getZombies()[this.hitList[this.hitList.length - 1]].pos.y, getZombies()[this.hitList[this.hitList.length - 1]].currentFloor);
-
-                    // canvasBuffer.getContext('2d').globalAlpha = 1;
-                    // bufferctx.globalCompositeOperation = 'source-over';
-                    getZombies()[this.hitList[this.hitList.length - 1]].takeDamage(this.parentPlayer, 1, 'melee', this.damage);
-
+                   }
 
 
                 }
@@ -2115,6 +3531,10 @@ class Weapon {
         this.shootTimer = 0;
         this.rotateSpeed = 1; //angle speed limited to reciprocal
         this.parentPlayer = {};
+        this.specialType = '';
+        this.weaponSwitchTimer = 0;
+        this.shotsFired = 1;
+        this.lastReloadTime = 0;
         if(type == 'M1911') {
             this.name = 'M1911 Handgun';
             this.internalName = 'M1911';
@@ -2130,13 +3550,12 @@ class Weapon {
             this.penetrationMult = 0.5;
             this.stoppingPower = 15;
             this.rotateSpeed = 3;
-            this.setupGun();
         }
         if(type == 'Kar98k') {
             this.name = 'Kar98k Bolt-Action Rifle';
             this.internalName = 'Kar98k';
             this.magSize = 5;
-            this.maxAmmo = 50; //so set currentReserve to 50
+            this.maxAmmo = 50; 
             this.startingAmmo = 55;
             this.semiAuto = true; //coded as semi auto with long fire delay
             this.fireRate = 75;
@@ -2148,13 +3567,12 @@ class Weapon {
             this.boltSound = null;
             this.stoppingPower = 40;
             this.rotateSpeed = 10;
-            this.setupGun();
         }
         if(type == 'M1Carbine') {
             this.name = 'M1 Carbine';
             this.internalName = 'M1Carbine';
             this.magSize = 15;
-            this.maxAmmo = 120; //so set currentReserve to 80
+            this.maxAmmo = 120; 
             this.startingAmmo = 135;
             this.semiAuto = true;
             this.fireRate = 8;
@@ -2165,13 +3583,12 @@ class Weapon {
             this.penetrationMult = 0.9;
             this.stoppingPower = 30;
             this.rotateSpeed = 10;
-            this.setupGun();
         }
         if(type == 'M1Thompson') {
             this.name = 'M1 Thompson Submachine Gun';
             this.internalName = 'M1Thompson';
             this.magSize = 20;
-            this.maxAmmo = 200; //so set currentReserve to 80
+            this.maxAmmo = 200; 
             this.startingAmmo = 220;
             this.semiAuto = false;
             this.fireRate = 5;
@@ -2182,13 +3599,12 @@ class Weapon {
             this.penetrationMult = 0.8;
             this.stoppingPower = 20;
             this.rotateSpeed = 7;
-            this.setupGun();
         }
         if(type == 'BAR') {
             this.name = 'BAR';
             this.internalName = 'BAR';
             this.magSize = 20;
-            this.maxAmmo = 160; //so set currentReserve to 80
+            this.maxAmmo = 160; 
             this.startingAmmo = 180;
             this.semiAuto = false;
             this.fireRate = 10;
@@ -2199,13 +3615,52 @@ class Weapon {
             this.penetrationMult = 0.95;
             this.stoppingPower = 25;
             this.rotateSpeed = 8;
-            this.setupGun();
         }
+
+        // will need a lot of special logic for this
+         if(type == 'doublebarreled') {
+            this.name = 'Double-Barreled Shotgun';
+            this.internalName = 'doublebarreled';
+            this.specialType = 'shotgun';
+            this.shotsFired = 8;
+            this.magSize = 2;
+            this.maxAmmo = 60;
+            this.startingAmmo = 62;
+            this.semiAuto = true;
+            this.fireRate = 4;
+            this.damage = 150;
+            //will add extra reload time when empty as an exception
+            this.reloadTime = 2.65;
+
+            this.range = 200;
+            this.penetration = 'full';
+            this.penetrationMult = 0.8;
+            this.stoppingPower = 30;
+            this.rotateSpeed = 8;
+        }
+
+        if(type == 'famas') {
+            this.name = 'FAMAS';
+            this.internalName = 'FAMAS';
+            this.magSize = 30;
+            this.maxAmmo = 120; 
+            this.startingAmmo = 150;
+            this.semiAuto = false;
+            this.fireRate = 4;
+            this.damage = 100;
+            this.reloadTime = 3.3;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.95;
+            this.stoppingPower = 25;
+            this.rotateSpeed = 7;
+        }
+
         if(type == 'raygun') {
             this.name = 'Ray Gun';
             this.internalName = 'raygun';
             this.magSize = 20;
-            this.maxAmmo = 160; //so set currentReserve to 80
+            this.maxAmmo = 160; 
             this.startingAmmo = 180;
             this.semiAuto = true;
             this.fireRate = 20;
@@ -2216,8 +3671,9 @@ class Weapon {
             this.penetrationMult = 0;
             this.stoppingPower = 20;
             this.rotateSpeed = 4;
-            this.setupGun();
         }
+
+        this.setupGun();
 
     }
     setupGun() {
@@ -2233,6 +3689,7 @@ class Weapon {
     }
     fire() {
         // drawLaser = true;
+        //drawlaser needs to die
         this.parentPlayer.drawLaser = 2;
         this.currentMag--;
         if(this.internalName == 'M1911') {
@@ -2255,14 +3712,28 @@ class Weapon {
             Sounds.playSound('BARfire');
         } else if(this.internalName == 'raygun') {
             Sounds.playSound('raygunfire');
+        } else if(this.internalName == 'doublebarreled') {
+            Sounds.playSound('doublebarreledfire');
         }
 
-        this.parentPlayer.ray[1] = Raytrace.collideBullet(this.parentPlayer.origin, Raytrace.castRay(this.parentPlayer.origin, this.parentPlayer.referenceRay, this.parentPlayer.currentFloor), zombies, this.parentPlayer.currentFloor, this.parentPlayer);
+        this.parentPlayer.ray[1] = Raytrace.collideBullet(this.parentPlayer.origin, Raytrace.castRay(this.parentPlayer.origin, this.parentPlayer.referenceRay[0], this.parentPlayer.currentFloor, this.range), zombies, this.parentPlayer.currentFloor, this.parentPlayer);
         //copy this for later rendering
         this.parentPlayer.ray[0].x = this.parentPlayer.origin.x;
         this.parentPlayer.ray[0].y = this.parentPlayer.origin.y;
+
+        if(this.specialType == 'shotgun') {
+            for(var i = 2; i < this.shotsFired + 1; i++){
+                this.parentPlayer.ray[i] = Raytrace.collideBullet(this.parentPlayer.origin, Raytrace.castRay(this.parentPlayer.origin, this.parentPlayer.referenceRay[i], this.parentPlayer.currentFloor, this.range*(1+Math.random()/5)), zombies, this.parentPlayer.currentFloor, this.parentPlayer);
+                
+            }
+        }
+        else if(this.parentPlayer.ray.length > 2) {
+            this.parentPlayer.ray.splice(2);
+        }
+
         if(this.internalName == 'raygun') { //create splash damage at location (I'll ignore walls for now?)
             createExplosion(this.parentPlayer, this.parentPlayer.ray[1], 32, this.parentPlayer.currentFloor, 300, 1500);
+            //in future create explosion with several rays?
         }
         if(this.canFire()) {
             this.shootTimer = this.fireRate;
@@ -2279,6 +3750,8 @@ class Weapon {
     startReload() {
         this.reloadTimer = Math.floor(this.reloadTime * 60);
         this.reloading = true;
+        //currently no good way to stop multiple reload sounds playing - 
+        //solution: per-player sound manager?
         if(this.internalName == 'M1911') {
             Sounds.playSound('M1911reload', 0.25);
         } else if(this.internalName == 'M1Carbine') {
@@ -2292,7 +3765,10 @@ class Weapon {
         } else if(this.internalName == 'Kar98k') {
             Sounds.stopSound('Kar98kbolt');
             Sounds.playSound('Kar98kreload', 0.2);
+        } else if(this.internalName == 'doublebarreled') {
+            if(this.currentMag == 0) {this.reloadTimer += Math.floor(0.8 * 60);}
         }
+        this.lastReloadTime = this.reloadTimer/60;
     }
     endReload() {
         var amount = Math.min(this.currentReserve, this.magSize - this.currentMag);
@@ -2310,6 +3786,11 @@ class Weapon {
         if(this.shootTimer > 0) {
             this.shootTimer--;
         }
+
+        if(this.weaponSwitchTimer > 0) {
+            this.weaponSwitchTimer--;
+        }
+
 
     }
 
@@ -2351,6 +3832,7 @@ class Zombie {
         this.slowTimer = 0;
         this.sinOffset = Math.round(Math.random() * 100);
         this.currentFloor = 0;
+        this.preference = [0,1,2,3];
 
     }
     setHealth(health) {
@@ -2401,40 +3883,41 @@ class Zombie {
     }
     takeDamage(player, mult = 1, type = 'gun', dmg = 0) {
         //assume weapon for now
-
+        //zombies taking damage when already dead messes up counter - not sure why this happens
+        if(this.alive==false) {return;};
         if(type == 'gun') {
             this.slowTimer = player.weapon.stoppingPower * mult;
 
-            this.health -= player.weapon.damage * mult;
-            player.money += 10;
+            this.health -= player.weapon.damage * mult * (1 + roundManager.powerups.instaKill.enabled*999999);
+            player.money += 10 * (roundManager.powerups.doublePoints.enabled + 1);
             if(this.health <= 0) {
                 this.kill();
-                player.money += 60;
+                player.money += 60 * (roundManager.powerups.doublePoints.enabled + 1);
                 roundManager.addZombieKill();
                 player.kills++;
             }
         } else if(type == 'splash') {
-            this.health -= dmg;
-            player.money += 10;
+            this.health -= dmg * (1 + roundManager.powerups.instaKill.enabled*999999);
+            player.money += 10 * (roundManager.powerups.doublePoints.enabled + 1);
             if(this.health <= 0) {
                 this.kill();
-                player.money += 60;
+                player.money += 60 * (roundManager.powerups.doublePoints.enabled + 1);
                 roundManager.addZombieKill();
                 player.kills++;
             }
         } else if(type == 'melee') {
-            this.health -= dmg;
-            player.money += 10;
+            this.health -= dmg * (1 + roundManager.powerups.instaKill.enabled*999999);
+            player.money += 10 * (roundManager.powerups.doublePoints.enabled + 1);
             if(this.health <= 0) {
                 this.kill();
-                player.money += 120;
+                player.money += 120 * (roundManager.powerups.doublePoints.enabled + 1);
                 roundManager.addZombieKill();
                 player.kills++;
             }
         }
 
     }
-    kill() {
+    kill(reason='combat') {
         //  this.pos.x = -100;
         //  this.pos.y = -100;
         var deathSprite = new Sprite();
@@ -2445,8 +3928,27 @@ class Zombie {
         deathSprite.floor = this.currentFloor;
         GameStage.addChild(deathSprite);
 
+        if(reason == 'combat')  {
+            for(var i = 0; i < obstacleContainer.interior[this.currentFloor].length; i++) {
+
+                //was the zombie killed in an interior?
+                if(jCirclePolyCollision(new Circle(new Vector(this.pos.x,this.pos.y),8),obstacleContainer.interior[this.currentFloor][i])) {
+                    //console.log('I died inside ' + i);
+                    //if(Math.random() > 0.95) {spawnPowerup(this.pos.x,this.pos.y,this.currentFloor);}
+                    //0.95 maybe slightly too good - real game uses 0.98
+                    if(Math.random() > 0.95 && roundManager.powerupsSpawned < 4) {
+                        spawnPowerup(this.pos.x,this.pos.y,this.currentFloor);
+                        roundManager.powerupsSpawned++;
+                        break;
+                    }
+                }
+
+            }
+        }
+
 
         this.alive = false;
+
         var r = Math.random();
         var xpos = 0;
         var ypos = 0;
@@ -2454,11 +3956,11 @@ class Zombie {
             xpos = tileSize * (-4 + Math.random() * (map.width + 4));
             ypos = -2 - Math.random() * 2 * tileSize;
         }
-        if(r < 0.5) {
+        else if(r < 0.5) {
             xpos = (-4 + Math.random() * (map.width + 4)) * tileSize;
             ypos = (map.height + 2 + Math.random() * 2) * tileSize;
         }
-        if(r < 0.75) {
+        else if(r < 0.75) {
             ypos = (-4 + Math.random() * (map.height + 4)) * tileSize;
             xpos = -2 - Math.random() * 2 * tileSize;
         } else {
@@ -2469,6 +3971,8 @@ class Zombie {
         this.pos.y = ypos;
         this.currentFloor = 0;
         this.maxSpeed = 0.4 + Math.random() * 0.4;
+        this.preference = shuffle(this.preference);
+
 
     }
     seek(target) {
@@ -2596,14 +4100,15 @@ class DijkstraMap {
     //3d time
     constructor(map) {
         //be careful when setting object properties, sometimes it's just a pointer!
-        //map keeps gettingp ointed to instead of cloned...
+        //map keeps getting pointed to instead of cloned...
         this.isCalculating = false;
         this.finishedCalculating = true;
         this.counter = 0;
+        this.windowCost = 1234; //large value
         this.map = {};
         this.map = JSON.parse(JSON.stringify(getMap()));
         //this.map = {floor: map.floor, floors:map.floors, width:map.width, height:map.height};
-        this.clear = '.,W-SV';
+        this.clear = '.,W-SVA';
         this.block = 'XDFB';
         this.cells = [];
         for(var i = 0; i < this.clear.length; i++) {
@@ -2633,7 +4138,9 @@ class DijkstraMap {
             }
         }
         //arbitrary test value
-        this.setGoal(600, 300, 0);
+        //this.setGoal(600, 300, 0);
+        //full grid reset
+        this.resetGrid(true);
     }
     setGoal(x, y, f = 0) {
 
@@ -2672,19 +4179,29 @@ class DijkstraMap {
         //optimise: run over several frames?
         //had slow down on vkt but potentially due to graphics instead
 
+        //dijkstra map algorithm
         //Iterate through the map's "floor" cells -- skip the impassable wall cells. 
         //If any floor tile has a value that is at least 2 greater than its lowest-value 
         //floor neighbour (in a cardinal direction - i.e. up, down, left or right), set it 
-        //to be exactly 1 greater than its lowest value neighbor. 
+        //to be exactly 1 greater than its lowest value neighbour. 
         //Repeat until no changes are made.
         //let's ignore edge cases lol
         //console.log('being calculating');
         //error when zombie in same cell as player? length of path 0?
 
         //maybe write to a temporary map then overwrite when finished? Not really needed if we wait for calculation to finish before updating paths
+
+        //new method - 2 step process. First use windows as goals set to a high value, then use players as goals but stop when reaching a window value
+        //hopefully results in one-way behaviour
+
+        //thoughts 09/18: might have to enable one way window pathfinding on a per-map basis, e.g. suitable on ndu but not verruckt
+        //windowAttractor tile 'A' being used, pathing breaks if player enters these tiles however.
+        //still having issues here - exterior calculation is ignoring stairs so have issues on first floor
+
         var hasChanged = true;
         var frameLimit = 10;
         var stepCounter = 0;
+        var windowCost = this.windowCost;
         while(hasChanged == true && stepCounter < frameLimit) {
             //debugger;
             stepCounter++;
@@ -2714,8 +4231,11 @@ class DijkstraMap {
                                 if(f == stairInfo.floor && j == Math.floor(stairInfo.x / tileSize) && i == Math.floor(stairInfo.y / tileSize)) {
 
                                     if(this.cells[f + diff][i][j] >= 0 && this.cells[f + diff][i][j] - this.cells[f][i][j] < -1) {
-                                        this.cells[f][i][j] = this.cells[f + diff][i][j] + 1;
-                                        hasChanged = true;
+                                        
+                                        if(this.cells[f][i][j] !== windowCost && (this.cells[f + diff][i][j] < windowCost || this.cells[f][i][j] < windowCost)) {
+                                            this.cells[f][i][j] = this.cells[f + diff][i][j] + 1;
+                                            hasChanged = true;
+                                        }
 
                                     }
                                 }
@@ -2739,20 +4259,29 @@ class DijkstraMap {
 
                             //end 3d stuff (please make it work)
                             if(this.cells[f][i - 1][j] >= 0 && this.cells[f][i - 1][j] - this.cells[f][i][j] < -1) {
-                                this.cells[f][i][j] = this.cells[f][i - 1][j] + 1;
-                                hasChanged = true;
+                                //don't change a window value or if neither of the values are below the windowCost threshold
+                                if(this.cells[f][i][j] !== windowCost && (this.cells[f][i-1][j] < windowCost || this.cells[f][i][j] < windowCost)) {
+                                    this.cells[f][i][j] = this.cells[f][i - 1][j] + 1;
+                                    hasChanged = true;
+                                }
                             }
                             if(this.cells[f][i + 1][j] >= 0 && this.cells[f][i + 1][j] - this.cells[f][i][j] < -1) {
-                                this.cells[f][i][j] = this.cells[f][i + 1][j] + 1;
-                                hasChanged = true;
+                                if(this.cells[f][i][j] !== windowCost && (this.cells[f][i+1][j] < windowCost || this.cells[f][i][j] < windowCost)) {
+                                    this.cells[f][i][j] = this.cells[f][i + 1][j] + 1;
+                                    hasChanged = true;
+                                }
                             }
                             if(this.cells[f][i][j - 1] >= 0 && this.cells[f][i][j - 1] - this.cells[f][i][j] < -1) {
-                                this.cells[f][i][j] = this.cells[f][i][j - 1] + 1;
-                                hasChanged = true;
+                                if(this.cells[f][i][j] !== windowCost && (this.cells[f][i][j-1] < windowCost || this.cells[f][i][j] < windowCost)) {
+                                    this.cells[f][i][j] = this.cells[f][i][j - 1] + 1;
+                                    hasChanged = true;
+                                }
                             }
                             if(this.cells[f][i][j + 1] >= 0 && this.cells[f][i][j + 1] - this.cells[f][i][j] < -1) {
-                                this.cells[f][i][j] = this.cells[f][i][j + 1] + 1;
-                                hasChanged = true;
+                                if(this.cells[f][i][j] !== windowCost && (this.cells[f][i][j+1] < windowCost || this.cells[f][i][j] < windowCost)) {
+                                    this.cells[f][i][j] = this.cells[f][i][j + 1] + 1;
+                                    hasChanged = true;
+                                }
                             }
 
                         }
@@ -2770,23 +4299,110 @@ class DijkstraMap {
 
 
     }
-    resetGrid() {
+    resetGrid(full = false) {
+        //set full to true to temporarily fix pathing issues? didn't work
+       
         for(var f = 0; f < this.map.floors; f++) {
             for(var i = 0; i < this.map.height; i++) {
-                this.cells[f][i] = [];
+                if(full) {this.cells[f][i] = [];}
                 for(var j = 0; j < this.map.width; j++) {
-                    this.cells[f][i][j] = -1;
+                    
                     var type = this.map.floor[f].data.charAt(i * this.map.width + j);
 
-                    if(type == 'Y') {
-                        this.cells[f][i][j] = 100000;
+                    if(full) {
+                        this.cells[f][i][j] = -1;
+                        if(type == 'Y') {
+                            this.cells[f][i][j] = 100000;
+                        }
+                    }
+                    else { //partial reset
+                        if(this.cells[f][i][j] < this.windowCost && type == 'Y') {
+                            this.cells[f][i][j] = 100000;
+                        }
+                    }
+                    /*if(getMap().floor[f].data.charAt(i * getMap().width + j) == 'W') {
+                      //  this.cells[f][i][j] = 999;
+                    }*/
+                }
+
+            }
+        }
+
+        //can block zombies in once they enter interior, but this has issues e.g. on verruckt, can't get to other players
+        //or don't restrict but then some interior routes don't get used
+        //could maybe use two maps in parallel, switching to the other once a window is reached...
+
+        if(full) {
+            console.log('full reset');
+            for(var f = 0; f < this.map.floors; f++) {
+                for(var i = 1; i < this.map.height - 1; i++) {
+                    for(var j = 1; j < this.map.width - 1; j++) {
+                        //changed from == 'W' to == 'A'
+                        if(getMap().floor[f].data.charAt(i * getMap().width + j) == 'A') {
+                            //uncomment to separate exterior/interior
+                            //this.cells[f][i][j] = this.windowCost;
+                        }
+                    }
+                }
+
+            }
+
+            //generate the dijkstra map using windows as targets set to windowCost
+            //duplicate code for now
+            //assume task can complete
+            var hasChanged = true;
+            while(hasChanged == true) {
+                
+                hasChanged = false;
+                for(var f = 0; f < this.map.floors; f++) {
+                    for(var i = 1; i < this.map.height - 1; i++) {
+                        for(var j = 1; j < this.map.width - 1; j++) {
+                            if(this.cells[f][i][j] >= 0) {
+                                //look at all neighbours
+                                for(var a = 0; a < map.teleportPoints.length; a++) {
+                                    // to do: account for teleports to different positions, not just floor
+                                    var stairInfo = map.teleportPoints[a];
+                                    var diff = stairInfo.destFloor - f;
+                                    if(f == stairInfo.floor && j == Math.floor(stairInfo.x / tileSize) && i == Math.floor(stairInfo.y / tileSize)) {
+
+                                        if(this.cells[f + diff][i][j] >= 0 && this.cells[f + diff][i][j] - this.cells[f][i][j] < -1) {
+                                                this.cells[f][i][j] = this.cells[f + diff][i][j] + 1;
+                                                hasChanged = true;
+                                        }
+                                    }
+                                }
+
+                                if(this.cells[f][i - 1][j] >= 0 && this.cells[f][i - 1][j] - this.cells[f][i][j] < -1) {
+                                     this.cells[f][i][j] = this.cells[f][i - 1][j] + 1;
+                                    hasChanged = true;  
+                                }
+                                if(this.cells[f][i + 1][j] >= 0 && this.cells[f][i + 1][j] - this.cells[f][i][j] < -1) {
+                                    this.cells[f][i][j] = this.cells[f][i + 1][j] + 1;
+                                    hasChanged = true;
+                                }
+                                if(this.cells[f][i][j - 1] >= 0 && this.cells[f][i][j - 1] - this.cells[f][i][j] < -1) {
+                                    this.cells[f][i][j] = this.cells[f][i][j - 1] + 1;
+                                    hasChanged = true;
+                                }
+                                if(this.cells[f][i][j + 1] >= 0 && this.cells[f][i][j + 1] - this.cells[f][i][j] < -1) {
+                                    this.cells[f][i][j] = this.cells[f][i][j + 1] + 1;
+                                    hasChanged = true;
+                                }
+                            }
+
+
+                        }
+
                     }
                 }
 
             }
         }
+
+        
+
     }
-    findPath(startx, starty, f) {
+    findPath(startx, starty, f, preference = [0,1,2,3]) {
         startx = Math.floor(startx / tileSize);
         starty = Math.floor(starty / tileSize);
 
@@ -2811,32 +4427,157 @@ class DijkstraMap {
                 loopCount++;
                 continueSearch = false;
                 currentValue = this.cells[searchF][searchy][searchx];
-                if(this.cells[searchF][searchy - 1][searchx] >= 0 && this.cells[searchF][searchy - 1][searchx] < currentValue) {
-                    continueSearch = true;
-                    nextx = searchx;
-                    nexty = searchy - 1;
-                    nextF = searchF;
+
+                //horrible method to make direction preferences for each zombie
+                //appears to have some positive impact - sometimes zombies are very quick
+                //to change entry attack points which is undesirable
+                switch(preference[0]) {
+                //up0
+                case 0: if(this.cells[searchF][searchy - 1][searchx] >= 0 && this.cells[searchF][searchy - 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy - 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                        //down1
+                case 1: if(this.cells[searchF][searchy + 1][searchx] >= 0 && this.cells[searchF][searchy + 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy + 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                //left2
+                case 2: if(this.cells[searchF][searchy][searchx - 1] >= 0 && this.cells[searchF][searchy][searchx - 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx - 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
+                //right3
+                case 3: if(this.cells[searchF][searchy][searchx + 1] >= 0 && this.cells[searchF][searchy][searchx + 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx + 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
                 }
-                if(this.cells[searchF][searchy + 1][searchx] >= 0 && this.cells[searchF][searchy + 1][searchx] < currentValue) {
-                    continueSearch = true;
-                    nextx = searchx;
-                    nexty = searchy + 1;
-                    nextF = searchF;
+                switch(preference[1]) {
+                //up0
+                case 0: if(this.cells[searchF][searchy - 1][searchx] >= 0 && this.cells[searchF][searchy - 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy - 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                        //down1
+                case 1: if(this.cells[searchF][searchy + 1][searchx] >= 0 && this.cells[searchF][searchy + 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy + 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                //left2
+                case 2: if(this.cells[searchF][searchy][searchx - 1] >= 0 && this.cells[searchF][searchy][searchx - 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx - 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
+                //right3
+                case 3: if(this.cells[searchF][searchy][searchx + 1] >= 0 && this.cells[searchF][searchy][searchx + 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx + 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
                 }
-                if(this.cells[searchF][searchy][searchx - 1] >= 0 && this.cells[searchF][searchy][searchx - 1] < currentValue) {
-                    continueSearch = true;
-                    nextx = searchx - 1;
-                    nexty = searchy;
-                    nextF = searchF;
+                switch(preference[2]) {
+                //up0
+                case 0: if(this.cells[searchF][searchy - 1][searchx] >= 0 && this.cells[searchF][searchy - 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy - 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                        //down1
+                case 1: if(this.cells[searchF][searchy + 1][searchx] >= 0 && this.cells[searchF][searchy + 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy + 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                //left2
+                case 2: if(this.cells[searchF][searchy][searchx - 1] >= 0 && this.cells[searchF][searchy][searchx - 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx - 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
+                //right3
+                case 3: if(this.cells[searchF][searchy][searchx + 1] >= 0 && this.cells[searchF][searchy][searchx + 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx + 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
                 }
-                if(this.cells[searchF][searchy][searchx + 1] >= 0 && this.cells[searchF][searchy][searchx + 1] < currentValue) {
-                    continueSearch = true;
-                    nextx = searchx + 1;
-                    nexty = searchy;
-                    nextF = searchF;
+                switch(preference[3]) {
+                //up0
+                case 0: if(this.cells[searchF][searchy - 1][searchx] >= 0 && this.cells[searchF][searchy - 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy - 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                        //down1
+                case 1: if(this.cells[searchF][searchy + 1][searchx] >= 0 && this.cells[searchF][searchy + 1][searchx] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx;
+                            nexty = searchy + 1;
+                            nextF = searchF;
+                        }
+                        break;
+
+                //left2
+                case 2: if(this.cells[searchF][searchy][searchx - 1] >= 0 && this.cells[searchF][searchy][searchx - 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx - 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
+                //right3
+                case 3: if(this.cells[searchF][searchy][searchx + 1] >= 0 && this.cells[searchF][searchy][searchx + 1] < currentValue) {
+                            continueSearch = true;
+                            nextx = searchx + 1;
+                            nexty = searchy;
+                            nextF = searchF;
+                        }
+                        break;
                 }
                 //stairs - stop search so that zombies don't go the wrong way
                 //scaleable version with list
+                //seems to have some issues going down on side stairs ndu, may be something I intended?
 
                 for(var a = 0; a < map.teleportPoints.length; a++) {
                     var stairInfo = map.teleportPoints[a];
@@ -2958,7 +4699,7 @@ class DijkstraMap {
 
     walk slowed when walking backwards? x
 
-    menu
+    menu x
 
     camera panning after death
 
@@ -3000,17 +4741,517 @@ class DijkstraMap {
     framerate drop when rendering death red screen
 
     Dreams: - many tile shape types complete with perfect collision detection
-            - collision physics (could cop out and use box2d, most likely would lag it to hell though)
+            - collision physics (box2d?)
             - 'walls', dynamic doors and mystery box animations
             - fun gameplay: how to make snipers unique, more arcadey movement
             - 2.5d/3d remake
 
+    //march 2018 update
+
+    polygon raycasting
+    polygon pathfinding - approximate fine(r) grid and generate at start?
+    zombies pathfinding - how to deal with windows? Can treat as walkable if destroyed, but may result in zombies getting stuck inside, or attempted destruction from inside which is undersirable
+                          - probably need to use triggers outside each window to aggro the zombie until the barricade is destroyed
+                          - could revert to finding a window if path to player unavailable, but then after one window is opened all zombies would go there
+                          - could always go to a window... but then can't have player in outside areas ever :/ would be a nice feature
+                          - use a line as window and calculate normal vector and determine side? Use this when ray casting for zombie path?
+
+    - feedback: could use some sort of aiming reticule as it's hard for new players to aim
+    -           -> maybe switch from angle-based aiming to reticule for certain weapons
 */
 
 
 //begin initialization
 
+//globals
 
+
+//sat - level polygons
+
+function loadMapGeometry(name) {
+
+    if(name=='ndu') {
+        //floor 0
+        obstacleContainer.Add(new Polygon(new Vector(352,240), [new Vector(-32,-16),new Vector(32,-16),new Vector(32,16),new Vector(-32,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(336,320), [new Vector(-16,-64),new Vector(16,-64),new Vector(16,64),new Vector(-16,64)]));
+        obstacleContainer.Add(new Polygon(new Vector(400,432), [new Vector(-80,-16),new Vector(80,-16),new Vector(80,16),new Vector(-80,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(480,240), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(496,288), [new Vector(16,-32),new Vector(16,32),new Vector(-16,32),new Vector(-16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(656,240), [new Vector(-80,-16),new Vector(-80,16),new Vector(80,16),new Vector(80,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(864,240), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(848,288), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(848,400), [new Vector(-16,-48),new Vector(-16,48),new Vector(16,48),new Vector(16,-48)]));
+        obstacleContainer.Add(new Polygon(new Vector(672,432), [new Vector(160,-16),new Vector(-160,-16),new Vector(-160,16),new Vector(160,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(560,384), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(640,368), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(656,400), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(720,368), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(784,368), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(461,269), [new Vector(-21,-13),new Vector(-13,3),new Vector(-5,11),new Vector(19,11),new Vector(19,-13)]));
+       // obstacleContainer.Add(new Polygon(new Vector(467,298), [new Vector(-11,-18),new Vector(-11,-2),new Vector(-3,14),new Vector(13,22),new Vector(13,-18)]));
+        obstacleContainer.Add(new Polygon(new Vector(752,240), [new Vector(-16,-16),new Vector(16,-16),new Vector(16,16),new Vector(-16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(640,480), [new Vector(-32,-32),new Vector(-32,32),new Vector(32,32),new Vector(32,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(768,496), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,496), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(832,464), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,432), [new Vector(-16,-16),new Vector(16,-16),new Vector(16,16),new Vector(-16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1168,600), [new Vector(-16,-88),new Vector(16,-88),new Vector(16,88),new Vector(-16,88)]));
+        obstacleContainer.Add(new Polygon(new Vector(1216,432), [new Vector(-64,16),new Vector(64,16),new Vector(64,-16),new Vector(-64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1245,184), [new Vector(35,-88),new Vector(-69,40),new Vector(35,48)]));
+        obstacleContainer.Add(new Polygon(new Vector(1248,320), [new Vector(-32,-96),new Vector(-32,96),new Vector(32,96),new Vector(32,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(1232,672), [new Vector(-48,16),new Vector(-48,-16),new Vector(48,-16),new Vector(48,16)]));
+
+        //mystery box
+       // obstacleContainer.Add(new Polygon(new Vector(896,282), [new Vector(-31,-2),new Vector(-20,24),new Vector(31,1),new Vector(19,-24)]));
+        obstacleContainer.Add(new Polygon(new Vector(899,282), [new Vector(-34,-1),new Vector(-21,24),new Vector(28,1),new Vector(29,-26)]));
+
+
+
+        obstacleContainer.Add(new Polygon(new Vector(1072,240), [new Vector(-144,-16),new Vector(-144,16),new Vector(144,16),new Vector(144,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1200,336), [new Vector(16,80),new Vector(16,-80),new Vector(-16,-80),new Vector(-16,80)]));
+        obstacleContainer.Add(new Polygon(new Vector(1168,384), [new Vector(16,32),new Vector(-16,32),new Vector(-16,-32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1136,288), [new Vector(16,32),new Vector(-16,32),new Vector(-16,-32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1072,272), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1008,288), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1136,400), [new Vector(-16,-48),new Vector(16,-48),new Vector(16,48),new Vector(-16,48)]));
+        obstacleContainer.Add(new Polygon(new Vector(1136,640), [new Vector(-16,-128),new Vector(16,-128),new Vector(16,128),new Vector(-16,128)]));
+        obstacleContainer.Add(new Polygon(new Vector(1104,752), [new Vector(-16,-16),new Vector(16,-16),new Vector(16,16),new Vector(-16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(960,752), [new Vector(96,-16),new Vector(96,16),new Vector(-96,16),new Vector(-96,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,720), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,624), [new Vector(-16,-48),new Vector(-16,48),new Vector(16,48),new Vector(16,-48)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,528), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1008,688), [new Vector(-16,16),new Vector(16,16),new Vector(16,-16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1008,592), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1008,496), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        //floor 0 windows
+
+        obstacleContainer.Add(new Polygon(new Vector(400,228), [new Vector(-32,-4),new Vector(-32,4),new Vector(32,4),new Vector(32,-4)])).setType('window').setId('1');
+        obstacleContainer.Add(new Polygon(new Vector(560,228), [new Vector(-32,-4),new Vector(-32,4),new Vector(32,4),new Vector(32,-4)])).setType('window').setId('2');
+        obstacleContainer.Add(new Polygon(new Vector(784,228), [new Vector(-32,-4),new Vector(-32,4),new Vector(32,4),new Vector(32,-4)])).setType('window').setId('3');
+        obstacleContainer.Add(new Polygon(new Vector(1148,480), [new Vector(4,-48),new Vector(-4,-48),new Vector(-4,48),new Vector(4,48)])).setType('window').setId('4');
+        obstacleContainer.Add(new Polygon(new Vector(1072,764), [new Vector(32,4),new Vector(32,-4),new Vector(-32,-4),new Vector(-32,4)])).setType('window').setId('5');
+        obstacleContainer.Add(new Polygon(new Vector(868,688), [new Vector(-4,32),new Vector(4,32),new Vector(4,-32),new Vector(-4,-32)])).setType('window').setId('6');
+        obstacleContainer.Add(new Polygon(new Vector(868,560), [new Vector(-4,32),new Vector(4,32),new Vector(4,-32),new Vector(-4,-32)])).setType('window').setId('7');
+        obstacleContainer.Add(new Polygon(new Vector(496,444), [new Vector(32,4),new Vector(32,-4),new Vector(-32,-4),new Vector(-32,4)])).setType('window').setId('8');
+        obstacleContainer.Add(new Polygon(new Vector(324,400), [new Vector(-4,32),new Vector(4,32),new Vector(4,-32),new Vector(-4,-32)])).setType('window').setId('9');
+
+        //floor 0 doors
+        //help door
+        obstacleContainer.Add(new Polygon(new Vector(848,336), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)])).setType('door').setId('help_door');
+        //help room stairs
+        obstacleContainer.Add(new Polygon(new Vector(1168,304), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)])).setType('door').setId('help_stairs_door');
+        obstacleContainer.Add(new Polygon(new Vector(1168,304), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1)).setType('door').setId('help_stairs_door');
+       
+        //ascend from darkness stairs
+        obstacleContainer.Add(new Polygon(new Vector(592,400), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)])).setType('door').setId('ascend_stairs_door');
+        obstacleContainer.Add(new Polygon(new Vector(592,400), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1)).setType('door').setId('ascend_stairs_door');
+
+
+        //floor 0 interior
+        obstacleContainer.AddInterior(new Polygon(new Vector(736,336), [new Vector(-384,-80),new Vector(-384,80),new Vector(384,80),new Vector(384,-80)],0));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1152,304), [new Vector(-32,-48),new Vector(32,-48),new Vector(32,48),new Vector(-32,48)],0));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1008,576), [new Vector(-112,-160),new Vector(-112,160),new Vector(112,160),new Vector(112,-160)],0));
+        //floor 1
+        obstacleContainer.Add(new Polygon(new Vector(1435,704), [new Vector(-11,-16),new Vector(21,0),new Vector(-11,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(336,336), [new Vector(-16,-112),new Vector(-16,112),new Vector(16,112),new Vector(16,-112)],1));
+        obstacleContainer.Add(new Polygon(new Vector(784,240), [new Vector(-432,-16),new Vector(432,-16),new Vector(432,16),new Vector(-432,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1200,336), [new Vector(16,-80),new Vector(16,80),new Vector(-16,80),new Vector(-16,-80)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1168,384), [new Vector(-16,-32),new Vector(16,-32),new Vector(16,32),new Vector(-16,32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1136,416), [new Vector(-16,-128),new Vector(16,-128),new Vector(16,128),new Vector(-16,128)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1136,608), [new Vector(-16,-32),new Vector(16,-32),new Vector(16,32),new Vector(-16,32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1104,656), [new Vector(48,-16),new Vector(48,16),new Vector(-48,16),new Vector(-48,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1136,736), [new Vector(-16,-32),new Vector(16,-32),new Vector(16,32),new Vector(-16,32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1104,752), [new Vector(16,16),new Vector(-16,16),new Vector(-16,-16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(960,752), [new Vector(96,-16),new Vector(96,16),new Vector(-96,16),new Vector(-96,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(880,608), [new Vector(16,128),new Vector(-16,128),new Vector(-16,-128),new Vector(16,-128)],1));
+        obstacleContainer.Add(new Polygon(new Vector(784,432), [new Vector(112,-16),new Vector(112,16),new Vector(-112,16),new Vector(-112,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(480,432), [new Vector(160,-16),new Vector(160,16),new Vector(-160,16),new Vector(-160,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(384,272), [new Vector(32,-16),new Vector(32,16),new Vector(-32,16),new Vector(-32,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(368,384), [new Vector(-16,-32),new Vector(16,-32),new Vector(16,32),new Vector(-16,32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(400,400), [new Vector(-16,-16),new Vector(16,-16),new Vector(16,16),new Vector(-16,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(496,336), [new Vector(-16,80),new Vector(-16,-80),new Vector(16,-80),new Vector(16,80)],1));
+        obstacleContainer.Add(new Polygon(new Vector(557,320), [new Vector(-45,-32),new Vector(-13,-32),new Vector(51,0),new Vector(51,32),new Vector(-45,32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(544,384), [new Vector(32,32),new Vector(-32,32),new Vector(-32,-32),new Vector(32,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(848,384), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(848,288), [new Vector(16,32),new Vector(-16,32),new Vector(-16,-32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1008,656), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(720,528), [new Vector(144,-16),new Vector(144,16),new Vector(-144,16),new Vector(-144,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(592,480), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(688,464), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(592,368), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1008,688), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1008,592), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1008,496), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(816,480), [new Vector(16,-32),new Vector(16,32),new Vector(-16,32),new Vector(-16,-32)],1));
+
+        
+        //bottom fence, not window
+        obstacleContainer.Add(new Polygon(new Vector(1072,752), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+
+
+        //floor 1 windows
+        //might need to block some of these... maybe have a triggered zombie spawn?
+        obstacleContainer.Add(new Polygon(new Vector(1148,560), [new Vector(4,-24),new Vector(4,24),new Vector(-4,24),new Vector(-4,-24)],1)).setType('window').setId('10');
+        obstacleContainer.Add(new Polygon(new Vector(1148,688), [new Vector(4,-24),new Vector(4,24),new Vector(-4,24),new Vector(-4,-24)],1)).setType('window').setId('11');
+        obstacleContainer.Add(new Polygon(new Vector(868,464), [new Vector(4,-24),new Vector(4,24),new Vector(-4,24),new Vector(-4,-24)],1)).setType('window').setId('12');
+        obstacleContainer.Add(new Polygon(new Vector(656,444), [new Vector(24,4),new Vector(-24,4),new Vector(-24,-4),new Vector(24,-4)],1)).setType('window').setId('13');
+
+        //floor 1 interior
+        obstacleContainer.AddInterior(new Polygon(new Vector(736,336), [new Vector(-384,-80),new Vector(-384,80),new Vector(384,80),new Vector(384,-80)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1152,304), [new Vector(-32,-48),new Vector(32,-48),new Vector(32,48),new Vector(-32,48)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1008,576), [new Vector(-112,-160),new Vector(-112,160),new Vector(112,160),new Vector(112,-160)],1));
+        
+    }
+
+    if(name == 'vkt') {
+        //floor 0
+        obstacleContainer.Add(new Polygon(new Vector(464,240), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(432,320), [new Vector(16,-96),new Vector(-16,-96),new Vector(-16,96),new Vector(16,96)]));
+        obstacleContainer.Add(new Polygon(new Vector(368,432), [new Vector(80,-16),new Vector(80,16),new Vector(-80,16),new Vector(-80,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(272,464), [new Vector(16,-48),new Vector(-16,-48),new Vector(-16,48),new Vector(16,48)]));
+        obstacleContainer.Add(new Polygon(new Vector(272,624), [new Vector(16,-80),new Vector(-16,-80),new Vector(-16,80),new Vector(16,80)]));
+        obstacleContainer.Add(new Polygon(new Vector(464,656), [new Vector(176,16),new Vector(176,-16),new Vector(-176,-16),new Vector(-176,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(592,640), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(272,768), [new Vector(-16,-32),new Vector(16,-32),new Vector(16,32),new Vector(-16,32)]));
+        obstacleContainer.Add(new Polygon(new Vector(368,816), [new Vector(-112,-16),new Vector(-112,16),new Vector(112,16),new Vector(112,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(464,960), [new Vector(-16,-128),new Vector(-16,128),new Vector(16,128),new Vector(16,-128)]));
+        obstacleContainer.Add(new Polygon(new Vector(576,1104), [new Vector(-128,-16),new Vector(-128,16),new Vector(128,16),new Vector(128,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(592,1072), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(560,816), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(592,880), [new Vector(-16,-112),new Vector(16,-112),new Vector(16,112),new Vector(-16,112)]));
+        obstacleContainer.Add(new Polygon(new Vector(640,944), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(544,496), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(592,480), [new Vector(-16,32),new Vector(16,32),new Vector(16,-32),new Vector(-16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(624,240), [new Vector(-112,-16),new Vector(-112,16),new Vector(112,16),new Vector(112,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(592,320), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(656,320), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(800,304), [new Vector(-128,-16),new Vector(-128,16),new Vector(128,16),new Vector(128,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(720,272), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,352), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(912,336), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(912,416), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(864,432), [new Vector(32,-16),new Vector(-32,-16),new Vector(-32,16),new Vector(32,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,448), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(752,656), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,608), [new Vector(-16,-96),new Vector(-16,96),new Vector(16,96),new Vector(16,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(896,528), [new Vector(64,16),new Vector(-64,16),new Vector(-64,-16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(944,560), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(944,736), [new Vector(-16,-128),new Vector(-16,128),new Vector(16,128),new Vector(16,-128)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,848), [new Vector(48,-16),new Vector(-48,-16),new Vector(-48,16),new Vector(48,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,816), [new Vector(-16,-48),new Vector(16,-48),new Vector(16,48),new Vector(-16,48)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,912), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(864,944), [new Vector(-128,-16),new Vector(-128,16),new Vector(128,16),new Vector(128,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1088,944), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,1104), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(688,1136), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(688,1216), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(800,1232), [new Vector(-96,-16),new Vector(-96,16),new Vector(96,16),new Vector(96,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(960,1104), [new Vector(-32,-16),new Vector(32,-16),new Vector(32,16),new Vector(-32,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(976,1168), [new Vector(-16,-48),new Vector(-16,48),new Vector(16,48),new Vector(16,-48)]));
+        obstacleContainer.Add(new Polygon(new Vector(1088,1232), [new Vector(-160,-16),new Vector(-160,16),new Vector(160,16),new Vector(160,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1120,1136), [new Vector(-32,-16),new Vector(32,-16),new Vector(32,16),new Vector(-32,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1072,1184), [new Vector(80,-32),new Vector(80,32),new Vector(-80,32),new Vector(-80,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1168,1040), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1200,944), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1232,1072), [new Vector(-16,-144),new Vector(16,-144),new Vector(16,144),new Vector(-16,144)]));
+        obstacleContainer.Add(new Polygon(new Vector(1008,336), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1072,336), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1008,432), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1072,432), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1296,976), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1296,1072), [new Vector(-16,16),new Vector(-16,-16),new Vector(16,-16),new Vector(16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1296,1168), [new Vector(-16,-16),new Vector(16,-16),new Vector(16,16),new Vector(-16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1136,208), [new Vector(16,80),new Vector(-16,80),new Vector(-16,-80),new Vector(16,-80)]));
+        obstacleContainer.Add(new Polygon(new Vector(1440,144), [new Vector(-288,-16),new Vector(288,-16),new Vector(288,16),new Vector(-288,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1168,336), [new Vector(-16,-80),new Vector(16,-80),new Vector(16,80),new Vector(-16,80)]));
+        obstacleContainer.Add(new Polygon(new Vector(1744,384), [new Vector(-16,-256),new Vector(16,-256),new Vector(16,256),new Vector(-16,256)]));
+        obstacleContainer.Add(new Polygon(new Vector(1440,432), [new Vector(288,-16),new Vector(288,16),new Vector(-288,16),new Vector(-288,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1488,480), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1440,784), [new Vector(-96,-16),new Vector(-96,16),new Vector(96,16),new Vector(96,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1552,864), [new Vector(-16,96),new Vector(16,96),new Vector(16,-96),new Vector(-16,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(1488,944), [new Vector(48,-16),new Vector(48,16),new Vector(-48,16),new Vector(-48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1424,880), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1424,880), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1408,912), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1360,1088), [new Vector(16,-160),new Vector(-16,-160),new Vector(-16,160),new Vector(16,160)]));
+        obstacleContainer.Add(new Polygon(new Vector(1568,1232), [new Vector(-192,-16),new Vector(-192,16),new Vector(192,16),new Vector(192,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1776,1168), [new Vector(-16,80),new Vector(-16,-80),new Vector(16,-80),new Vector(16,80)]));
+        obstacleContainer.Add(new Polygon(new Vector(1824,1104), [new Vector(-32,-16),new Vector(32,-16),new Vector(32,16),new Vector(-32,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1840,1024), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(1808,896), [new Vector(16,96),new Vector(-16,96),new Vector(-16,-96),new Vector(16,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(1840,736), [new Vector(-16,-96),new Vector(-16,96),new Vector(16,96),new Vector(16,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(1728,656), [new Vector(-96,-16),new Vector(-96,16),new Vector(96,16),new Vector(96,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1424,496), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1424,560), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1488,480), [new Vector(-16,32),new Vector(-16,-32),new Vector(16,-32),new Vector(16,32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1280,464), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1328,512), [new Vector(-16,-64),new Vector(16,-64),new Vector(16,64),new Vector(-16,64)]));
+        obstacleContainer.Add(new Polygon(new Vector(1264,560), [new Vector(48,16),new Vector(-48,16),new Vector(-48,-16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1296,512), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1248,496), [new Vector(32,16),new Vector(-32,16),new Vector(-32,-16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1488,576), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(1600,592), [new Vector(-96,-16),new Vector(-96,16),new Vector(96,16),new Vector(96,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1648,624), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(1424,688), [new Vector(-80,80),new Vector(-80,-80),new Vector(80,-80),new Vector(80,80)]));
+        obstacleContainer.Add(new Polygon(new Vector(592,1008), [new Vector(-16,-80),new Vector(-16,80),new Vector(16,80),new Vector(16,-80)]));
+
+        //floor 0 windows
+        obstacleContainer.Add(new Polygon(new Vector(496,228), [new Vector(-32,-4),new Vector(-32,4),new Vector(32,4),new Vector(32,-4)])).setType('window').setId('1');
+        obstacleContainer.Add(new Polygon(new Vector(260,528), [new Vector(-4,-32),new Vector(4,-32),new Vector(4,32),new Vector(-4,32)])).setType('window').setId('2');
+        obstacleContainer.Add(new Polygon(new Vector(260,720), [new Vector(-4,-32),new Vector(4,-32),new Vector(4,32),new Vector(-4,32)])).setType('window').setId('3');
+        obstacleContainer.Add(new Polygon(new Vector(676,1168), [new Vector(-4,-32),new Vector(4,-32),new Vector(4,32),new Vector(-4,32)])).setType('window').setId('4');
+        obstacleContainer.Add(new Polygon(new Vector(912,1244), [new Vector(-32,-4),new Vector(-32,4),new Vector(32,4),new Vector(32,-4)])).setType('window').setId('5');
+        obstacleContainer.Add(new Polygon(new Vector(1008,932), [new Vector(-32,-4),new Vector(-32,4),new Vector(32,4),new Vector(32,-4)])).setType('window').setId('6');
+        obstacleContainer.Add(new Polygon(new Vector(1168,932), [new Vector(-16,-4),new Vector(-16,4),new Vector(16,4),new Vector(16,-4)])).setType('window').setId('7');
+        obstacleContainer.Add(new Polygon(new Vector(828,880), [new Vector(4,-32),new Vector(-4,-32),new Vector(-4,32),new Vector(4,32)])).setType('window').setId('8');
+        obstacleContainer.Add(new Polygon(new Vector(956,592), [new Vector(-4,-32),new Vector(-4,32),new Vector(4,32),new Vector(4,-32)])).setType('window').setId('9');
+        obstacleContainer.Add(new Polygon(new Vector(828,496), [new Vector(-4,-32),new Vector(4,-32),new Vector(4,32),new Vector(-4,32)])).setType('window').setId('10');
+        obstacleContainer.Add(new Polygon(new Vector(924,368), [new Vector(-4,-32),new Vector(4,-32),new Vector(4,32),new Vector(-4,32)])).setType('window').setId('11');
+        obstacleContainer.Add(new Polygon(new Vector(1476,528), [new Vector(-4,-32),new Vector(4,-32),new Vector(4,32),new Vector(-4,32)])).setType('window').setId('12');
+
+        //floor 0 interior
+        obstacleContainer.AddInterior(new Polygon(new Vector(544,544), [new Vector(-256,-96),new Vector(-256,96),new Vector(256,96),new Vector(256,-96)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(576,352), [new Vector(-128,-96),new Vector(-128,96),new Vector(128,96),new Vector(128,-96)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(752,384), [new Vector(48,64),new Vector(-48,64),new Vector(-48,-64),new Vector(48,-64)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(848,368), [new Vector(-48,-48),new Vector(-48,48),new Vector(48,48),new Vector(48,-48)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(880,688), [new Vector(-48,-144),new Vector(48,-144),new Vector(48,144),new Vector(-48,144)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(560,736), [new Vector(-272,-64),new Vector(-272,64),new Vector(272,64),new Vector(272,-64)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(528,944), [new Vector(-48,-144),new Vector(-48,144),new Vector(48,144),new Vector(48,-144)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(672,656), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(704,944), [new Vector(-96,-144),new Vector(-96,144),new Vector(96,144),new Vector(96,-144)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(960,1152), [new Vector(-256,-64),new Vector(-256,64),new Vector(256,64),new Vector(256,-64)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1008,1024), [new Vector(-208,-64),new Vector(-208,64),new Vector(208,64),new Vector(208,-64)],1));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1616,544), [new Vector(-112,-96),new Vector(-112,96),new Vector(112,96),new Vector(112,-96)],1));
+
+        //floor 1
+        obstacleContainer.Add(new Polygon(new Vector(656,240), [new Vector(80,-16),new Vector(80,16),new Vector(-80,16),new Vector(-80,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(592,272), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(608,304), [new Vector(64,-16),new Vector(64,16),new Vector(-64,16),new Vector(-64,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(560,416), [new Vector(-16,-96),new Vector(-16,96),new Vector(16,96),new Vector(16,-96)],1));
+        obstacleContainer.Add(new Polygon(new Vector(656,496), [new Vector(-80,-16),new Vector(80,-16),new Vector(80,16),new Vector(-80,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(720,544), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(784,560), [new Vector(-48,-16),new Vector(48,-16),new Vector(48,16),new Vector(-48,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(816,528), [new Vector(16,16),new Vector(-16,16),new Vector(-16,-16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1040,496), [new Vector(-240,-16),new Vector(-240,16),new Vector(240,16),new Vector(240,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1328,496), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(720,368), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(880,400), [new Vector(-176,-16),new Vector(-176,16),new Vector(176,16),new Vector(176,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(848,272), [new Vector(-144,-16),new Vector(-144,16),new Vector(144,16),new Vector(144,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(992,240), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1008,176), [new Vector(-16,48),new Vector(-16,-48),new Vector(16,-48),new Vector(16,48)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1040,144), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1424,144), [new Vector(-336,-16),new Vector(-336,16),new Vector(336,16),new Vector(336,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1744,416), [new Vector(-16,-224),new Vector(-16,224),new Vector(16,224),new Vector(16,-224)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1696,240), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1344,240), [new Vector(-192,-16),new Vector(-192,16),new Vector(192,16),new Vector(192,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1232,320), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1296,400), [new Vector(-144,-16),new Vector(-144,16),new Vector(144,16),new Vector(144,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1632,400), [new Vector(-96,-16),new Vector(-96,16),new Vector(96,16),new Vector(96,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1360,608), [new Vector(-16,-192),new Vector(-16,192),new Vector(16,192),new Vector(16,-192)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1408,656), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1696,656), [new Vector(-160,-16),new Vector(160,-16),new Vector(160,16),new Vector(-160,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1680,688), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1840,752), [new Vector(-16,-80),new Vector(-16,80),new Vector(16,80),new Vector(16,-80)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1808,832), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1808,928), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1680,864), [new Vector(-16,-96),new Vector(-16,96),new Vector(16,96),new Vector(16,-96)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1472,784), [new Vector(96,-16),new Vector(96,16),new Vector(-96,16),new Vector(-96,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1552,880), [new Vector(16,-80),new Vector(16,80),new Vector(-16,80),new Vector(-16,-80)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1488,976), [new Vector(-208,-16),new Vector(-208,16),new Vector(208,16),new Vector(208,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1808,976), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1840,1056), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1776,1104), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1360,944), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1360,1008), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1392,1104), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1552,1104), [new Vector(-80,-16),new Vector(-80,16),new Vector(80,16),new Vector(80,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1648,592), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1696,560), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1776,1184), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1744,1232), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1520,1232), [new Vector(176,-16),new Vector(176,16),new Vector(-176,16),new Vector(-176,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1360,1152), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1328,1280), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1104,880), [new Vector(368,-16),new Vector(368,16),new Vector(-368,16),new Vector(-368,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(720,848), [new Vector(-16,-48),new Vector(-16,48),new Vector(16,48),new Vector(16,-48)],1));
+        obstacleContainer.Add(new Polygon(new Vector(688,816), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(592,816), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(560,896), [new Vector(-16,-96),new Vector(-16,96),new Vector(16,96),new Vector(16,-96)],1));
+        obstacleContainer.Add(new Polygon(new Vector(880,976), [new Vector(304,-16),new Vector(304,16),new Vector(-304,16),new Vector(-304,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(720,1008), [new Vector(-80,-16),new Vector(-80,16),new Vector(80,16),new Vector(80,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(816,1024), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(656,1088), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(656,1280), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(752,1328), [new Vector(-80,-16),new Vector(-80,16),new Vector(80,16),new Vector(80,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(816,1264), [new Vector(-16,-48),new Vector(-16,48),new Vector(16,48),new Vector(16,-48)],1));
+        obstacleContainer.Add(new Polygon(new Vector(928,1264), [new Vector(-96,-16),new Vector(-96,16),new Vector(96,16),new Vector(96,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1008,1312), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1168,1328), [new Vector(144,-16),new Vector(144,16),new Vector(-144,16),new Vector(-144,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1168,1232), [new Vector(-80,-16),new Vector(-80,16),new Vector(80,16),new Vector(80,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1232,1152), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1120,1136), [new Vector(-32,-16),new Vector(32,-16),new Vector(32,16),new Vector(-32,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1136,1088), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1200,1072), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1379,526), [new Vector(-2,-23),new Vector(2,-14),new Vector(4,1),new Vector(1,13),new Vector(-4,19)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1280,560), [new Vector(64,-16),new Vector(64,16),new Vector(-64,16),new Vector(-64,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(1200,544), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1));
+
+        //floor 1 windows
+        obstacleContainer.Add(new Polygon(new Vector(1072,132), [new Vector(-16,-4),new Vector(-16,4),new Vector(16,4),new Vector(16,-4)],1)).setType('window').setId('13');
+        obstacleContainer.Add(new Polygon(new Vector(1756,176), [new Vector(-4,-16),new Vector(-4,16),new Vector(4,16),new Vector(4,-16)],1)).setType('window').setId('14');
+        obstacleContainer.Add(new Polygon(new Vector(1820,880), [new Vector(-4,-16),new Vector(-4,16),new Vector(4,16),new Vector(4,-16)],1)).setType('window').setId('15');
+        obstacleContainer.Add(new Polygon(new Vector(1712,1244), [new Vector(16,4),new Vector(-16,4),new Vector(-16,-4),new Vector(16,-4)],1)).setType('window').setId('16');
+        obstacleContainer.Add(new Polygon(new Vector(644,1184), [new Vector(4,32),new Vector(-4,32),new Vector(-4,-32),new Vector(4,-32)],1)).setType('window').setId('17');
+        obstacleContainer.Add(new Polygon(new Vector(640,804), [new Vector(-32,4),new Vector(-32,-4),new Vector(32,-4),new Vector(32,4)],1)).setType('window').setId('18');
+        obstacleContainer.Add(new Polygon(new Vector(1372,912), [new Vector(4,16),new Vector(-4,16),new Vector(-4,-16),new Vector(4,-16)],1)).setType('window').setId('19');
+        obstacleContainer.Add(new Polygon(new Vector(1296,508), [new Vector(16,4),new Vector(-16,4),new Vector(-16,-4),new Vector(16,-4)],1)).setType('window').setId('20');
+
+
+        //doors
+        obstacleContainer.Add(new Polygon(new Vector(656,272), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)])).setType('door').setId('north_stairs');
+        obstacleContainer.Add(new Polygon(new Vector(656,272), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)],1)).setType('door').setId('north_stairs');
+        obstacleContainer.Add(new Polygon(new Vector(672,656), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)])).setType('door').setId('power_door');
+        obstacleContainer.Add(new Polygon(new Vector(512,816), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)])).setType('door').setId('pap_room');
+        obstacleContainer.Add(new Polygon(new Vector(704,944), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)])).setType('door').setId('south_room');
+        obstacleContainer.Add(new Polygon(new Vector(1184,1136), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)])).setType('door').setId('south_room_stairs');
+        obstacleContainer.Add(new Polygon(new Vector(1184,1136), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1)).setType('door').setId('south_room_stairs');
+
+        obstacleContainer.Add(new Polygon(new Vector(1104,240), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1)).setType('door').setId('upstairs_left_door_1');
+        obstacleContainer.Add(new Polygon(new Vector(1488,400), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1)).setType('door').setId('left_power_room_door');
+        obstacleContainer.Add(new Polygon(new Vector(1488,656), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)],1)).setType('door').setId('right_power_room_door');
+        obstacleContainer.Add(new Polygon(new Vector(1728,976), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1)).setType('door').setId('upstairs_right_door_2');
+        obstacleContainer.Add(new Polygon(new Vector(1360,1056), [new Vector(-16,-32),new Vector(-16,32),new Vector(16,32),new Vector(16,-32)],1)).setType('door').setId('upstairs_right_door_1');
+
+        //floor 1 interior
+        obstacleContainer.AddInterior(new Polygon(new Vector(800,368), [new Vector(-224,-112),new Vector(-224,112),new Vector(224,112),new Vector(224,-112)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(768,512), [new Vector(-32,-32),new Vector(-32,32),new Vector(32,32),new Vector(32,-32)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1552,624), [new Vector(-176,-144),new Vector(-176,144),new Vector(176,144),new Vector(176,-144)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1376,320), [new Vector(-352,-160),new Vector(-352,160),new Vector(352,160),new Vector(352,-160)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1776,736), [new Vector(-48,-64),new Vector(-48,64),new Vector(48,64),new Vector(48,-64)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1680,880), [new Vector(-112,112),new Vector(-112,-112),new Vector(112,-112),new Vector(112,112)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1008,1088), [new Vector(-336,-192),new Vector(-336,192),new Vector(336,192),new Vector(336,-192)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(640,896), [new Vector(-64,-64),new Vector(-64,64),new Vector(64,64),new Vector(64,-64)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(736,1296), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1168,1296), [new Vector(-144,-16),new Vector(-144,16),new Vector(144,16),new Vector(144,-16)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1552,1104), [new Vector(-208,-112),new Vector(-208,112),new Vector(208,112),new Vector(208,-112)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(1792,1040), [new Vector(-32,-48),new Vector(-32,48),new Vector(32,48),new Vector(32,-48)]));
+
+    }
+
+
+    if(name == 'five') {
+        //floor 0
+        obstacleContainer.Add(new Polygon(new Vector(448,848), [new Vector(-128,-16),new Vector(-128,16),new Vector(128,16),new Vector(128,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(640,848), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(656,768), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(608,720), [new Vector(32,-16),new Vector(32,16),new Vector(-32,16),new Vector(-32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(528,720), [new Vector(16,16),new Vector(-16,16),new Vector(-16,-16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(528,784), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(256,848), [new Vector(32,-16),new Vector(32,16),new Vector(-32,16),new Vector(-32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(240,784), [new Vector(16,48),new Vector(-16,48),new Vector(-16,-48),new Vector(16,-48)]));
+        obstacleContainer.Add(new Polygon(new Vector(224,720), [new Vector(64,-16),new Vector(64,16),new Vector(-64,16),new Vector(-64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(208,688), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(336,720), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(432,720), [new Vector(-80,-16),new Vector(-80,16),new Vector(80,16),new Vector(80,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(624,688), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(624,528), [new Vector(-16,-112),new Vector(-16,112),new Vector(16,112),new Vector(16,-112)]));
+        obstacleContainer.Add(new Polygon(new Vector(624,368), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(576,336), [new Vector(64,-16),new Vector(64,16),new Vector(-64,16),new Vector(-64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(672,336), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(720,384), [new Vector(-16,-64),new Vector(16,-64),new Vector(16,64),new Vector(-16,64)]));
+        obstacleContainer.Add(new Polygon(new Vector(752,432), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(464,336), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(384,336), [new Vector(64,-16),new Vector(64,16),new Vector(-64,16),new Vector(-64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(304,336), [new Vector(16,-16),new Vector(-16,-16),new Vector(-16,16),new Vector(16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(208,528), [new Vector(16,112),new Vector(-16,112),new Vector(-16,-112),new Vector(16,-112)]));
+        obstacleContainer.Add(new Polygon(new Vector(208,368), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(224,336), [new Vector(32,-16),new Vector(32,16),new Vector(-32,16),new Vector(-32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(208,256), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(400,208), [new Vector(-144,-16),new Vector(-144,16),new Vector(144,16),new Vector(144,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(400,272), [new Vector(16,-16),new Vector(16,16),new Vector(-16,16),new Vector(-16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(640,208), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(688,128), [new Vector(16,-64),new Vector(16,64),new Vector(-16,64),new Vector(-16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(752,80), [new Vector(-48,-16),new Vector(-48,16),new Vector(48,16),new Vector(48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(768,192), [new Vector(-32,-32),new Vector(-32,32),new Vector(32,32),new Vector(32,-32)]));
+        obstacleContainer.Add(new Polygon(new Vector(784,240), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(848,208), [new Vector(-48,16),new Vector(-48,-16),new Vector(48,-16),new Vector(48,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(864,292), [new Vector(0,-68),new Vector(0,68)]));
+        obstacleContainer.Add(new Polygon(new Vector(880,288), [new Vector(-16,-64),new Vector(-16,64),new Vector(16,64),new Vector(16,-64)]));
+        obstacleContainer.Add(new Polygon(new Vector(816,336), [new Vector(48,-16),new Vector(48,16),new Vector(-48,16),new Vector(-48,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(784,304), [new Vector(-16,16),new Vector(-16,-16),new Vector(16,-16),new Vector(16,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(848,496), [new Vector(-16,-144),new Vector(-16,144),new Vector(16,144),new Vector(16,-144)]));
+
+        obstacleContainer.Add(new Polygon(new Vector(304,528), [new Vector(-16,-112),new Vector(16,-112),new Vector(16,112),new Vector(-16,112)]));
+        obstacleContainer.Add(new Polygon(new Vector(448,432), [new Vector(-64,-16),new Vector(-64,16),new Vector(64,16),new Vector(64,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(560,432), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(560,624), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(269,501), [new Vector(19,-85),new Vector(-13,-77),new Vector(-13,-53),new Vector(-13,107),new Vector(19,107)]));
+        obstacleContainer.Add(new Polygon(new Vector(400,542), [new Vector(-16,-94),new Vector(-16,98),new Vector(16,90),new Vector(16,-94)]));
+        obstacleContainer.Add(new Polygon(new Vector(448,544), [new Vector(-32,-96),new Vector(-32,96),new Vector(32,96),new Vector(32,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(496,480), [new Vector(16,-32),new Vector(16,32),new Vector(-16,32),new Vector(-16,-32)]));
+
+        obstacleContainer.Add(new Polygon(new Vector(208,112), [new Vector(-16,-80),new Vector(-16,80),new Vector(16,80),new Vector(16,-80)]));
+        obstacleContainer.Add(new Polygon(new Vector(256,48), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(384,80), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(400,144), [new Vector(-16,-48),new Vector(-16,48),new Vector(16,48),new Vector(16,-48)]));
+        obstacleContainer.Add(new Polygon(new Vector(624,108), [new Vector(-48,-84),new Vector(-48,84),new Vector(48,84),new Vector(48,-84)]));
+        obstacleContainer.Add(new Polygon(new Vector(472,180), [new Vector(56,12),new Vector(56,-12),new Vector(-56,-12),new Vector(-56,12)]));
+        obstacleContainer.Add(new Polygon(new Vector(532,152), [new Vector(-4,16),new Vector(4,8),new Vector(4,-8),new Vector(-4,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(483,139), [new Vector(45,-3),new Vector(45,-27),new Vector(-67,-27),new Vector(-67,29),new Vector(45,29)]));
+        obstacleContainer.Add(new Polygon(new Vector(640,229), [new Vector(-19,-5),new Vector(-16,1),new Vector(-5,4),new Vector(8,4),new Vector(16,1),new Vector(19,-5)]));
+        obstacleContainer.Add(new Polygon(new Vector(759,234), [new Vector(-4,-8),new Vector(-8,-3),new Vector(-8,3),new Vector(-3,8),new Vector(4,8),new Vector(9,4),new Vector(9,-10)]));
+        obstacleContainer.Add(new Polygon(new Vector(633,785), [new Vector(7,-18),new Vector(0,-16),new Vector(-4,-12),new Vector(-5,0),new Vector(-4,12),new Vector(3,17),new Vector(8,18)]));
+        obstacleContainer.Add(new Polygon(new Vector(332,165), [new Vector(-17,-2),new Vector(1,17),new Vector(18,1),new Vector(-3,-17)]));
+        obstacleContainer.Add(new Polygon(new Vector(356,152), [new Vector(-16,6),new Vector(-7,13),new Vector(14,-6),new Vector(7,-12)]));
+        obstacleContainer.Add(new Polygon(new Vector(353,139), [new Vector(1,7),new Vector(-8,0),new Vector(-4,-8),new Vector(10,2)]));
+        obstacleContainer.Add(new Polygon(new Vector(234,104), [new Vector(-10,23),new Vector(10,23),new Vector(10,-23),new Vector(-11,-22)]));
+        obstacleContainer.Add(new Polygon(new Vector(257,97), [new Vector(-12,3),new Vector(-2,13),new Vector(14,-4),new Vector(-1,-12)]));
+        obstacleContainer.Add(new Polygon(new Vector(269,74), [new Vector(19,-10),new Vector(19,10),new Vector(-18,11),new Vector(-19,-11)]));
+
+
+        //floor 0 interior
+        obstacleContainer.AddInterior(new Polygon(new Vector(544,272), [new Vector(-320,-48),new Vector(320,-48),new Vector(320,48),new Vector(-320,48)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(416,512), [new Vector(-192,-192),new Vector(192,-192),new Vector(192,192),new Vector(-192,192)]));
+        obstacleContainer.AddInterior(new Polygon(new Vector(448,768), [new Vector(-192,-64),new Vector(-192,64),new Vector(192,64),new Vector(192,-64)]));
+
+        //at round start choose only 4 of the 6 windows to spawn zombies. A new set of 4 is chosen after the power is turned on
+    }
+
+    if(name == 'test') {
+        //floor 0
+        obstacleContainer.Add(new Polygon(new Vector(112,240), [new Vector(-16,-48),new Vector(16,-48),new Vector(16,48),new Vector(-16,48)]));
+        obstacleContainer.Add(new Polygon(new Vector(160,272), [new Vector(-32,-16),new Vector(32,-16),new Vector(32,16),new Vector(-32,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(208,304), [new Vector(-16,-48),new Vector(16,-48),new Vector(16,48),new Vector(-16,48)]));
+        obstacleContainer.Add(new Polygon(new Vector(176,208), [new Vector(-16,-16),new Vector(-16,16),new Vector(16,16),new Vector(16,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(208,176), [new Vector(-16,48),new Vector(16,48),new Vector(16,-48),new Vector(-16,-48)]));
+        obstacleContainer.Add(new Polygon(new Vector(352,144), [new Vector(-128,-16),new Vector(128,-16),new Vector(128,16),new Vector(-128,16)]));
+        obstacleContainer.Add(new Polygon(new Vector(464,256), [new Vector(-16,-96),new Vector(-16,96),new Vector(16,96),new Vector(16,-96)]));
+        obstacleContainer.Add(new Polygon(new Vector(336,336), [new Vector(112,-16),new Vector(112,16),new Vector(-112,16),new Vector(-112,-16)]));
+        obstacleContainer.Add(new Polygon(new Vector(416,272), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)]));
+
+        //window
+        obstacleContainer.Add(new Polygon(new Vector(200,240), [new Vector(-8,-32),new Vector(-2,-32),new Vector(-2,32),new Vector(-8,32)])).setType('window').setId('one');
+
+
+            //floor 1
+
+        obstacleContainer.Add(new Polygon(new Vector(464,240), [new Vector(-16,-112),new Vector(16,-112),new Vector(16,112),new Vector(-16,112)],1));
+        obstacleContainer.Add(new Polygon(new Vector(320,144), [new Vector(128,-16),new Vector(128,16),new Vector(-128,16),new Vector(-128,-16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(208,240), [new Vector(16,-80),new Vector(16,80),new Vector(-16,80),new Vector(-16,-80)],1));
+        obstacleContainer.Add(new Polygon(new Vector(144,240), [new Vector(-48,-48),new Vector(48,-48),new Vector(48,48),new Vector(-48,48)],1));
+        obstacleContainer.Add(new Polygon(new Vector(320,336), [new Vector(-128,-16),new Vector(128,-16),new Vector(128,16),new Vector(-128,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(368,304), [new Vector(16,16),new Vector(16,-16),new Vector(-16,-16),new Vector(-16,16)],1));
+        obstacleContainer.Add(new Polygon(new Vector(384,272), [new Vector(-32,-16),new Vector(-32,16),new Vector(32,16),new Vector(32,-16)],1));
+
+    }
+}
+
+
+//some setgoals error when hitting corner?
+//
+
+//polygon container
+var obstacleContainer = new ObstacleContainer();
 var cols = ['#558844', '#DD2244'];
 var tileTypes = {
     grass: '#077524',
@@ -3024,15 +5265,18 @@ var tileTypes = {
 var NUM_PLAYERS = 0;
 var MAP_NAME = '';
 
-var canvas = document.getElementById('cvs');
 var canvasBuffer = {};
 canvasBuffer.floor = [];
 canvasBuffer.walls = [];
 canvasBuffer.blood = [];
 
+
+
+var w = 640, h = 480;
+
 //heavily affects lag...
-var CANVAS_WIDTH = 640; //640*2;
-var CANVAS_HEIGHT = 480; //480*2; // to fix unknown drawimage lag at parts of map...
+var CANVAS_WIDTH = w; //640;
+var CANVAS_HEIGHT = h; //480; // increases this fixed unknown drawimage lag at parts of map...
 //xxx*1 from xxx*2 helped, gpu acceleration still falls over when many floors are rendered
 //buffer height/width in tiles, size 32
 var BUFFER_WIDTH = 70;
@@ -3040,52 +5284,7 @@ var BUFFER_HEIGHT = 50;
 //making buffers too large destroys performance...
 //resolution for multiple players may need adjusting
 
-//set up canvas buffers
-for(var i = 0; i < 4; i++) {
 
-    canvasBuffer.floor[i] = document.createElement('canvas');
-    canvasBuffer.floor[i].width = BUFFER_WIDTH * 32;
-    canvasBuffer.floor[i].height = BUFFER_HEIGHT * 32;
-    canvasBuffer.floor[i].ctx = canvasBuffer.floor[i].getContext('2d');
-
-    canvasBuffer.walls[i] = document.createElement('canvas');
-    canvasBuffer.walls[i].width = BUFFER_WIDTH * 32;
-    canvasBuffer.walls[i].height = BUFFER_HEIGHT * 32;
-    canvasBuffer.walls[i].ctx = canvasBuffer.walls[i].getContext('2d');
-
-    canvasBuffer.blood[i] = document.createElement('canvas');
-    canvasBuffer.blood[i].width = BUFFER_WIDTH * 32;
-    canvasBuffer.blood[i].height = BUFFER_HEIGHT * 32;
-    canvasBuffer.blood[i].ctx = canvasBuffer.blood[i].getContext('2d');
-}
-
-//drawlayers not currently used!
-/*var drawLayers = [];
-for(var i = 0;i<4;i++){
-drawLayers[i]= document.createElement('canvas');
-drawLayers[i].width = CANVAS_WIDTH*8;
-drawLayers[i].height = CANVAS_HEIGHT*8;
-drawLayers[i].ctx = drawLayers[i].getContext('2d');
-}*/
-
-var secondCanvas = document.createElement('canvas');
-secondCanvas.width = CANVAS_WIDTH;
-secondCanvas.height = CANVAS_HEIGHT;
-secondCanvas.ctx = secondCanvas.getContext('2d');
-
-var thirdCanvas = document.createElement('canvas');
-thirdCanvas.width = CANVAS_WIDTH;
-thirdCanvas.height = CANVAS_HEIGHT;
-thirdCanvas.ctx = thirdCanvas.getContext('2d');
-
-
-var fourthCanvas = document.createElement('canvas');
-fourthCanvas.width = CANVAS_WIDTH;
-fourthCanvas.height = CANVAS_HEIGHT;
-fourthCanvas.ctx = fourthCanvas.getContext('2d');
-
-
-var ctx = canvas.getContext('2d');
 
 var fps = 60;
 var interval = 1000 / fps;
@@ -3094,8 +5293,6 @@ var lastTime = 0;
 var currentTime = d;
 var delta = 0;
 
-
-var w = 640, h = 480;
 
 var runGame = false;
 var gameEnded = false;
@@ -3156,12 +5353,13 @@ var tilesHeight = Math.floor(h / tileSize);
 var tiles = [];
 
 var map;
+var mapClassInstance;
 // = new Maps().getMap();
 //map.data = map.floor[0].data;
 
 
 
-var canvases = [ctx, secondCanvas.ctx, thirdCanvas.ctx, fourthCanvas.ctx];
+var canvases = [];
 
 var cameraLocation = {
     x: 0,
@@ -3189,10 +5387,17 @@ cameraBorders['vkt'] = {
     w: 65,
     h: 43
 };
+cameraBorders['five'] = {
+    x: 3,
+    y: 3,
+    w: 27,
+    h: 26
+};
 var cameraBorder = cameraBorders[MAP_NAME];
 
 var Images = new ImageManager();
 var Sounds = new SoundManager();
+var MysteryBox = new MysteryBoxManager();
 
 var playerFacing = 0;
 var spriteTestNum = 0;
@@ -3203,12 +5408,7 @@ var dijkstraMap;
 
 var players = [];
 
-for(var n = 0; n < NUM_PLAYERS; n++) {
-    players.push(new Player());
 
-    players[n].playerFacing = 2 * Math.PI * Math.random();
-    players[n].addWeapon('M1911');
-}
 //players[0].weapon = new Weapon('Kar98k');
 //players[0].weapon = new Weapon('M1Carbine');
 //players[0].weapon = new Weapon('M1Thompson');
@@ -3221,7 +5421,7 @@ var gameCamera = new Camera();
 //init zombies
 var zombies = [];
 
-var roundManager = new RoundManager();
+var roundManager;
 var gameStarted = false;
 
 var offset = Math.round(Math.random() * 4);
@@ -3254,19 +5454,89 @@ window.onload = function() {
 //end initialization
 
 
-function init(mapName='vkt', numPlayers = 1) {
+function init(mapName='vkt', numPlayers = 1, resWidth = 640, resHeight = 480) {
    
     NUM_PLAYERS = numPlayers;
     MAP_NAME = mapName;
 
 
-    if(NUM_PLAYERS > 1) {
+    w = resWidth;
+    h = resHeight;
+    CANVAS_WIDTH = resWidth;
+    CANVAS_HEIGHT = resHeight;
+    //set up canvas buffers
+    for(var i = 0; i < 4; i++) {
+
+        canvasBuffer.floor[i] = document.createElement('canvas');
+        canvasBuffer.floor[i].width = BUFFER_WIDTH * 32;
+        canvasBuffer.floor[i].height = BUFFER_HEIGHT * 32;
+        canvasBuffer.floor[i].ctx = canvasBuffer.floor[i].getContext('2d');
+
+        canvasBuffer.walls[i] = document.createElement('canvas');
+        canvasBuffer.walls[i].width = BUFFER_WIDTH * 32;
+        canvasBuffer.walls[i].height = BUFFER_HEIGHT * 32;
+        canvasBuffer.walls[i].ctx = canvasBuffer.walls[i].getContext('2d');
+
+        canvasBuffer.blood[i] = document.createElement('canvas');
+        canvasBuffer.blood[i].width = BUFFER_WIDTH * 32;
+        canvasBuffer.blood[i].height = BUFFER_HEIGHT * 32;
+        canvasBuffer.blood[i].ctx = canvasBuffer.blood[i].getContext('2d');
+    }
+
+    //drawlayers not currently used!
+    /*var drawLayers = [];
+    for(var i = 0;i<4;i++){
+    drawLayers[i]= document.createElement('canvas');
+    drawLayers[i].width = CANVAS_WIDTH*8;
+    drawLayers[i].height = CANVAS_HEIGHT*8;
+    drawLayers[i].ctx = drawLayers[i].getContext('2d');
+    }*/
+
+    var firstCanvas = document.createElement('canvas');
+    firstCanvas.width = CANVAS_WIDTH;
+    firstCanvas.height = CANVAS_HEIGHT;
+    firstCanvas.ctx = firstCanvas.getContext('2d');
+
+
+    var secondCanvas = document.createElement('canvas');
+    secondCanvas.width = CANVAS_WIDTH;
+    secondCanvas.height = CANVAS_HEIGHT;
+    secondCanvas.ctx = secondCanvas.getContext('2d');
+
+    var thirdCanvas = document.createElement('canvas');
+    thirdCanvas.width = CANVAS_WIDTH;
+    thirdCanvas.height = CANVAS_HEIGHT;
+    thirdCanvas.ctx = thirdCanvas.getContext('2d');
+
+
+    var fourthCanvas = document.createElement('canvas');
+    fourthCanvas.width = CANVAS_WIDTH;
+    fourthCanvas.height = CANVAS_HEIGHT;
+    fourthCanvas.ctx = fourthCanvas.getContext('2d');
+
+    canvases = [firstCanvas.ctx, secondCanvas.ctx, thirdCanvas.ctx, fourthCanvas.ctx];
+
+    roundManager = new RoundManager();
+
+    loadMapGeometry(MAP_NAME);
+
+for(var n = 0; n < NUM_PLAYERS; n++) {
+    players.push(new Player(n));
+
+    players[n].playerFacing = 2 * Math.PI * Math.random();
+    players[n].addWeapon('M1911');
+    //players[n].addWeapon('doublebarreled');
+}
+
+    if(NUM_PLAYERS >= 1) {
         var loc = 'container';
+        document.getElementById(loc).appendChild(firstCanvas);
         if(NUM_PLAYERS == 2) {
             loc = 'container2';
+            document.getElementById(loc).appendChild(secondCanvas);
         }
-        document.getElementById(loc).appendChild(secondCanvas);
         if(NUM_PLAYERS > 2) {
+            document.getElementById('container').appendChild(secondCanvas);
             document.getElementById('container2').appendChild(thirdCanvas);
         }
         if(NUM_PLAYERS > 3) {
@@ -3274,8 +5544,8 @@ function init(mapName='vkt', numPlayers = 1) {
         }
     }
 
-    canvas.onmousedown = regen;
-    canvas.onmouseup = mouseUpHandler;
+    firstCanvas.onmousedown = regen;
+    firstCanvas.onmouseup = mouseUpHandler;
     window.onmousemove = mouseMove;
     window.onkeydown = keyDownHandler;
     window.onkeyup = keyUpHandler;
@@ -3285,7 +5555,8 @@ function init(mapName='vkt', numPlayers = 1) {
 
     tiles = [];
 
-    map = new Maps().getMap();
+    mapClassInstance = new Maps();
+    map = mapClassInstance.getMap();
     map.data = map.floor[0].data;
 
     cameraLocation = {x: 0,y: 0,floor: 0};
@@ -3298,14 +5569,14 @@ function init(mapName='vkt', numPlayers = 1) {
     spriteTestNumZom = 0;
     dijkstraMap = new DijkstraMap(map);
 
-    players = [];
+    /*players = [];
 
     for(var n = 0; n < NUM_PLAYERS; n++) {
         players.push(new Player());
 
         players[n].playerFacing = 2 * Math.PI * Math.random();
         players[n].addWeapon('M1911');
-    }
+    }*/
 
     GameStage = new Stage();
     gameCamera = new Camera();
@@ -3332,13 +5603,15 @@ function init(mapName='vkt', numPlayers = 1) {
             xpos = (map.width + Math.random() * 4) * tileSize;
         }
         zombies[i] = new Zombie(xpos, ypos);
-        zombies[i].maxSpeed = 0.65 + Math.random() * 0.25;
+        zombies[i].maxSpeed = 0.8 + Math.random() * 0.25;
+        //speed range 1+1.25 is fastest for high difficulty - need to adjust turning though
         zombies[i].maxForce = 1;
         zombies[i].velocity.x = 1;
         zombies[i].alive = false;
+        zombies[i].preference = shuffle(zombies[i].preference);
     }
 
-    roundManager = new RoundManager();
+    //roundManager = new RoundManager();
     gameStarted = false;
 
     
@@ -3353,10 +5626,11 @@ function init(mapName='vkt', numPlayers = 1) {
                 var type = map.floor[f].data.charAt(i * map.width + j);
 
                 tiles[f][i][j].setType(type);
-                if(f !== 0 && tiles[f][i][j].type == 'grass') {
+                //replace grass tiles to air (old lazy method of map defining)
+                /*if(f !== 0 && tiles[f][i][j].type == 'grass') {
                     tiles[f][i][j].walkable = false;
                     tiles[f][i][j].passable = false;
-                }
+                }*/
                 // if(Math.random() > 0.8){tiles[i][j].passable = false;}
             }
         }
@@ -3367,7 +5641,7 @@ function init(mapName='vkt', numPlayers = 1) {
         players[n].pos.x = map.spawnPoints[(n + offset) % map.spawnPoints.length].x;
         players[n].pos.y = map.spawnPoints[(n + offset) % map.spawnPoints.length].y;
         players[n].currentFloor = map.spawnPoints[(n + offset) % map.spawnPoints.length].floor;
-        console.log('Player ', n, 'spawned');
+        //console.log('Player ', n, 'spawned');
     }
 
     hasDrawnBuffer = false;
@@ -3403,6 +5677,9 @@ function main() {
         thinkCount++;
         if(thinkCount > 60) {
 
+            //test for exterior/interior divide
+            //if(dijkstraMap.cells[0][21][10] < 1234) {console.log('exterior failed');}
+            
             //start calculation of a new dijkstra map
             if(!dijkstraMap.isCalculating) {
                 var goals = [];
@@ -3415,6 +5692,7 @@ function main() {
                         });
                     }
                 }
+                //console.log(goals);
                 dijkstraMap.setGoals(goals);
             }
 
@@ -3475,7 +5753,8 @@ function main() {
         // }
         for(var p = 0; p < NUM_PLAYERS; p++) {
             var ctx = canvases[p];
-            gameCamera.follow(players[p]);
+            //currently use one gamecamera object for all players
+            gameCamera.follow(players[p],p);
             ctx.setTransform(1, 0, 0, 1, -gameCamera.x, -gameCamera.y);
             //does clearrect have any effect?
             //ctx.clearRect(0,0,w,h);
@@ -3550,7 +5829,7 @@ function updatePositions() {
                 }
                 var speedMult = 1; //speed penalty for walking backwards
                 if(Math.abs(AngleDifference(players[p].playerFacing, Math.atan2(input[p].axis1 * (Math.abs(input[p].axis1) > 0.1 ? 1 : 0), input[p].axis0 * (Math.abs(input[p].axis0) ? 1 : 0)))) > Math.PI / 2) {
-                    speedMult = 0.5;
+                    speedMult = 0.75;
                 }
                 scrollVector.x = -Math.cos(ang) * (Math.abs(input[p].axis0) > 0.1 ? 1 : 0) * speedMult;
 
@@ -3563,6 +5842,7 @@ function updatePositions() {
                 // scrollVector.mult(scrollVector.magnitude()*scrollSpeed);
 
             }
+
             //keyboard input
             if(KEYBOARD_INPUT == true && p == 0) {
                 var angDiff = limit(AngleDifference(keyboardInput.angle, players[0].playerFacing), Math.PI * 2 / players[0].weapon.rotateSpeed) / 5;
@@ -3572,8 +5852,7 @@ function updatePositions() {
                     isRotating = true;
                 }
                 var speedMult = 1;
-                //no penalty for walking backwards yet
-
+                
                 //mouse movement
                 /*scrollVector.x = -Math.cos(keyboardInput.angle)*speedMult*keyboardInput.speed;
             scrollVector.y = -Math.sin(keyboardInput.angle)*speedMult*keyboardInput.speed;
@@ -3586,7 +5865,7 @@ function updatePositions() {
                 vel.y = -(keyboardInput.up * -1 + keyboardInput.down * 1);
                 vel.normalize();
                 if(Math.abs(AngleDifference(Math.atan2(-vel.y, -vel.x), keyboardInput.angle)) > Math.PI / 2) {
-                    speedMult = 0.5;
+                    speedMult = 0.75;
                 }
 
 
@@ -3632,65 +5911,79 @@ function updatePositions() {
             //basic square collision detection for now
 
             if(players[p].noclip == false) {
-                var floorX = Math.floor((players[p].pos.x - 10) / tileSize);
-                var floorY = Math.floor((players[p].pos.y - 10) / tileSize);
-                var xtop = players[p].pos.x - 10;
-                var ytop = players[p].pos.y - 10;
-                //it gets stuck sometimes, but does it matter? Implement walls if you are bothered
+                
+                //SAT collision test
 
-                for(var i = floorY; i < floorY + 2; i++) {
-                    for(var j = floorX; j < floorX + 2; j++) {
+                for(var i = 0; i < obstacleContainer.obstacles.length; i++) {
+                    if(obstacleContainer.obstacles[i].enabled && obstacleContainer.obstacles[i].floor == players[p].currentFloor){
+                    var collision = jCirclePolyCollision(new Circle(new Vector(players[p].pos.x,players[p].pos.y),8),obstacleContainer.obstacles[i]);
+                    if(collision.result){
+                        var displace = collision.displacement.vec.Multiply(collision.displacement.range.Length());
+                        
+                        players[p].pos.x -= displace.x;
+                         players[p].pos.y -= displace.y; 
+                        //circ.setPos(circ.pos.Subtract(displace));
 
-
-                        if(tiles[players[p].currentFloor][i][j].walkable == false) {
-
-                            var xchange = 0;
-                            var ychange = 0;
-                            if(xtop > j * tileSize - 20 && xtop < (j + 1) * tileSize && ytop < (i + 1) * tileSize && ytop > i * tileSize - 20) {
-                                //move min dist on x-axis
-                                if(Math.abs(xtop + 20 - j * tileSize) < Math.abs((j + 1) * tileSize - xtop)) {
-                                    xchange = xtop + 20 - j * tileSize;
-                                } else {
-                                    xchange = -(j + 1) * tileSize + xtop;
-                                }
-
-                                if(Math.abs(ytop + 20 - i * tileSize) < Math.abs((i + 1) * tileSize - ytop)) {
-                                    ychange = ytop + 20 - i * tileSize;
-                                } else {
-                                    ychange = -(i + 1) * tileSize + ytop;
-                                }
-
-
-                            }
-                            if(Math.abs(xchange) < Math.abs(ychange)) {
-                                players[p].pos.x -= xchange;
-                            } else {
-                                players[p].pos.y -= ychange;
-                            }
-
-                            xtop = players[p].pos.x - 10;
-                            ytop = players[p].pos.y - 10;
-
+                        //ctx.beginPath();
+                        //ctx.moveTo(300,500);
+                        
                         }
-
-
-
                     }
-                }
+                    
+                 }
+
+
             }
 
             scrollVector.mult(-1);
             if(players[p].sprint) {
                 scrollVector.mult(2);
             }
+
+            //faster movement
+            scrollVector.mult(players[p].speed);
+
             if(!(KEYBOARD_INPUT && p == 0)) {
                 scrollVector.mult(Math.max((new Vector2D(input[p].axis0, input[p].axis1).magnitude())), 1);
             }
             players[p].pos.add(scrollVector);
             scrollVector.mult(-1);
+
             //regen player health
-            players[p].health = Math.min(100, players[p].health + 0.025);
+            players[p].health = Math.min(100, players[p].health + 0.025);           
+            
         }
+        //played is downed
+        else if(players[p].dead == false) {
+                if(players[p].reviveMeter >= 100) {
+                    //revive player and remove weapons
+                    //lost points go to reviver
+                    players[players[p].currentReviver].money += Math.round(0.052 * players[p].money);
+                    players[p].health = players[p].maxHealth;
+                    players[p].down = false;
+                    players[p].currentReviver = -1;
+                    getActionsById('revive_player_' + p)[0].triggers[0].radius = 0;
+                }
+                else if(players[p].health <= 0) {
+                    players[p].dead = true;
+                    getActionsById('revive_player_' + p)[0].triggers[0].radius = 0;
+                    for(var i = 0; i < NUM_PLAYERS; i++) {
+                        //all players lose 10% money
+                        players[i].money = Math.round(players[i].money * 0.9);
+                    }
+                }
+                else if(players[p].reviveHealthAmount == 0) {
+                    //nobody trying to revive so reset progress
+                    players[p].reviveMeter = 0;
+                    players[p].currentReviver = -1;
+                    //bleed out for 45 secs
+                    players[p].health -= 100/(45 * 60);
+                }
+                //add health regen
+                players[p].reviveMeter += players[p].reviveHealthAmount;
+                players[p].reviveHealthAmount = 0;
+        }
+
     }
     //zombie  behaviour
 
@@ -3704,13 +5997,18 @@ function updatePositions() {
                     var r = Raytrace.castRay(new Vector2D(zombies[i].pos.x, zombies[i].pos.y), new Vector2D(players[p].pos.x, players[p].pos.y), zombies[i].currentFloor);
 
                     //check zombie is close and can see player and is on same floor
-                    if(zombies[i].currentFloor == players[p].currentFloor && Vector2D.distance(zombies[i].pos, players[p].pos) < 50 && Vector2D.distance(zombies[i].pos, players[p].pos) + Vector2D.distance(players[p].pos, r) >= Vector2D.distance(zombies[i].pos, r) - 1) {
+                    if(!isTargetingPlayer && zombies[i].currentFloor == players[p].currentFloor && Vector2D.distance(zombies[i].pos, players[p].pos) < 50 && Vector2D.distance(zombies[i].pos, players[p].pos) + Vector2D.distance(players[p].pos, r) >= Vector2D.distance(zombies[i].pos, r) - 1) {
                         zombies[i].separate(zombies);
                         zombies[i].follow(zombies[i].path);
 
                         zombies[i].arrive(players[p].pos);
                         isTargetingPlayer = true;
-
+                        //this is sometimes causing zombies to get stuck in walls looking up e.g.
+                        //   P
+                        //XXXX
+                        //   X
+                        //   X
+                        //   z
 
                         //zombies[i].arrive(players[0].pos);
 
@@ -3736,150 +6034,52 @@ function updatePositions() {
     for(var z = 0; z < zombies.length; z++) {
         if(zombies[z].alive) {
 
-            var floorX = Math.floor((zombies[z].pos.x - 8) / tileSize);
-            var floorY = Math.floor((zombies[z].pos.y - 8) / tileSize);
-            for(var i = floorY; i < floorY + 2; i++) {
-                for(var j = floorX; j < floorX + 2; j++) {
-                    if(i < 0 || i > map.height - 1 || j < 0 || j > map.width - 1) {
-                        //zombie is outside of map, ignore this
-                    } else {
-                        if(tiles[zombies[z].currentFloor][i][j].passable == false) {
+            //sat method zombie collison
+              for(var i = 0; i < obstacleContainer.obstacles.length; i++) {
+                    if(obstacleContainer.obstacles[i].enabled && obstacleContainer.obstacles[i].floor == zombies[z].currentFloor){
+                    var collision = jCirclePolyCollision(new Circle(new Vector(zombies[z].pos.x,zombies[z].pos.y),8),obstacleContainer.obstacles[i]);
+                    if(collision.result){
 
-                            var xchange = 0;
-                            var ychange = 0;
-                            if(zombies[z].pos.x + 8 > j * tileSize && zombies[z].pos.x - 8 < (j + 1) * tileSize &&
-                                zombies[z].pos.y + 8 > i * tileSize && zombies[z].pos.y - 8 < (i + 1) * tileSize) {
-                                //move min dist in x or y axis
-                                if(Math.abs(zombies[z].pos.x + 8 - j * tileSize) < Math.abs((j + 1) * tileSize - zombies[z].pos.x + 8)) {
-                                    xchange = zombies[z].pos.x + 8 - j * tileSize;
-                                } else {
-                                    xchange = -(j + 1) * tileSize + zombies[z].pos.x - 8;
+                        if(obstacleContainer.obstacles[i].type == 'window') {
+                            //get id - damage?
+                            if(getMapClass().getWindowById(obstacleContainer.obstacles[i].id).health > 0) {
+                                
+                                if(zombies[z].canAttack() && getMapClass().getWindowById(obstacleContainer.obstacles[i].id).readyToBeHit) {
+                                    //console.log('attack window');
+                                    getMapClass().getWindowById(obstacleContainer.obstacles[i].id).damage(20);
+                                    zombies[z].attack();
                                 }
-
-                                if(Math.abs(zombies[z].pos.y + 8 - i * tileSize) < Math.abs((i + 1) * tileSize - zombies[z].pos.y + 8)) {
-                                    ychange = zombies[z].pos.y + 8 - i * tileSize;
-                                } else {
-                                    ychange = -(i + 1) * tileSize + zombies[z].pos.y - 8;
-                                }
-
-
-                                if(Math.abs(xchange) < Math.abs(ychange)) {
-                                    zombies[z].pos.x -= xchange;
-                                } else {
-                                    zombies[z].pos.y -= ychange;
-                                }
-
-
-
+                                //slight acceleration back to movement
+                                zombies[z].slowTimer = 40;
                             }
-
+                            else{continue;}
                         }
 
+                        var displace = collision.displacement.vec.Multiply(collision.displacement.range.Length());
+                        zombies[z].pos.x -= displace.x;
+                        zombies[z].pos.y -= displace.y; 
+                        //circ.setPos(circ.pos.Subtract(displace));
+
+                        //ctx.beginPath();
+                        //ctx.moveTo(300,500);
+                        
+                        }
                     }
-
-                }
-
-            }
+                    
+                 }
 
         }
 
     }
 
-    //keep camera in bounds of map - laggy if size of map is size of border no idea why
-    // if both coords are 0?
-    /* //this works
-     cameraLocation.x = players[0].pos.x - w/2;
-     //keep camera in bounds of map
-     if(cameraLocation.x > map.width*tileSize -w){cameraLocation.x = map.width*tileSize -w;}
-     else if(cameraLocation.x < 4*tileSize){cameraLocation.x = 4*tileSize;}
-     cameraLocation.y = players[0].pos.y - h/2;
-     if(cameraLocation.y > (map.height-1)*tileSize -h){cameraLocation.y = (map.height-1)*tileSize -h;}
-     else if(cameraLocation.y < 2*tileSize ){cameraLocation.y = 2*tileSize;}*/
-
-    //adjust for each map
-    //screws up if x and y too small, works fine for others?
-    /*     cameraLocation.x = players[0].pos.x - w/2;
-        if(cameraLocation.x > (cameraBorder.x + cameraBorder.w)*tileSize -w){cameraLocation.x = (cameraBorder.x + cameraBorder.w)*tileSize -w;}
-        if(cameraLocation.x < cameraBorder.x*tileSize){
-            cameraLocation.x = cameraBorder.x*tileSize;}
-        cameraLocation.y = players[0].pos.y - h/2;
-        if(cameraLocation.y > (cameraBorder.y + cameraBorder.h)*tileSize -h){cameraLocation.y = (cameraBorder.y + cameraBorder.h)*tileSize -h;}
-        if(cameraLocation.y < cameraBorder.y*tileSize ){cameraLocation.y = cameraBorder.y*tileSize;}
-    */
-    //why does this screw up so much...
-    /*   
-    //else if(cameraLocation.x < 4*tileSize){cameraLocation.x = 4*tileSize;}
-              //  cameraLocation.x = players[0].pos.x - w/2;
-              //  cameraLocation.y =players[0].pos.y - h/2;
-              //  cameraLocation.x = 0;
-               //  cameraLocation.y = 0;
-       
-       // if(map.width >cameraBorder.w && map.height > cameraBorder.h){
-
-      /*   
-        if(cameraLocation.x < cameraBorder.x*tileSize){
-             cameraLocation.x = cameraBorder.x*tileSize;
-            //console.log('whyy');
-        }
-
-        if(cameraLocation.x > (cameraBorder.x+cameraBorder.w)*tileSize -w){
-            cameraLocation.x = (cameraBorder.x+cameraBorder.w)*tileSize-w;
-        }
-        else{cameraLocation.x = players[0].pos.x - w/2;}
-
-
-     */
-    /*
-               if(map.width > cameraBorder.w && map.height > cameraBorder.h){
-                    console.log('check camera');
-                  cameraLocation.x = players[0].pos.x- w/2;
-                if(cameraLocation.x < cameraBorder.x*tileSize){
-
-                    cameraLocation.x = cameraBorder.x*tileSize;
-               
-                }
-                else if(cameraLocation.x > (cameraBorder.x + cameraBorder.w)*tileSize -w){
-                    cameraLocation.x = (cameraBorder.x + cameraBorder.w)*tileSize -w;
-                  
-                }
-               
-                  cameraLocation.y = players[0].pos.y- h/2;
-                if(cameraLocation.y < cameraBorder.y*tileSize){
-
-                    cameraLocation.y = cameraBorder.y*tileSize;
-                  //  console.log('y too negative, set to 0');
-                   // console.log(cameraLocation.y);
-                }
-                else if(cameraLocation.y > (cameraBorder.y + cameraBorder.h)*tileSize -h){
-                    cameraLocation.y = (cameraBorder.y + cameraBorder.h)*tileSize -h;
-                   //    console.log('y too positive, set to edge');
-                }
-             }
-             else{
-                
-                //do nothing
-                 }
-                     //console.log('putting camera on player');
-                 
-                 
-                //}
-
-            //cameraLocation.y = players[0].pos.y- h/2;
-            //cameraLocation.x = players[0].pos.x - w/2;
-                
-             //cameraLocation.x = 0;cameraLocation.y=0;
-                    //cameraLocation = new Vector2D(200,200);
-                    //cameraLocation.y = players[0].pos.y - h/2;
-                  //  transformVector = cameraLocation;
-
-                  */
+    
     for(var i = 0; i < NUM_PLAYERS; i++) {
         if(players[i].down == false) {
             players[i].origin.x = players[i].pos.x + 18 * Math.cos(players[i].playerFacing) - 5 * Math.sin(players[i].playerFacing);
             players[i].origin.y = players[i].pos.y + 18 * Math.sin(players[i].playerFacing) + 5 * Math.cos(players[i].playerFacing);
             var randSpread = Math.random() * 1 - 0.5;
-            players[i].referenceRay.x = players[i].pos.x + 36 * Math.cos(players[i].playerFacing) - (5 + randSpread) * Math.sin(players[i].playerFacing);
-            players[i].referenceRay.y = players[i].pos.y + 36 * Math.sin(players[i].playerFacing) + (5 + randSpread) * Math.cos(players[i].playerFacing);
+            players[i].referenceRay[0].x = players[i].pos.x + 36 * Math.cos(players[i].playerFacing) - (5 + randSpread) * Math.sin(players[i].playerFacing);
+            players[i].referenceRay[0].y = players[i].pos.y + 36 * Math.sin(players[i].playerFacing) + (5 + randSpread) * Math.cos(players[i].playerFacing);
 
             //handle weapons and shooting
 
@@ -3902,7 +6102,18 @@ function updatePositions() {
             if(players[i].fire && players[i].weapon.shootTimer == 0) {
                 if(players[i].weapon.canFire()) {
                     players[i].fire = false;
-                    // fire();
+                   
+                    //create additional bullets if needed
+                    if(players[i].weapon.shotsFired > 1) {
+                        for(var j = 1; j < players[i].weapon.shotsFired + 1; j++) {
+                            randSpread = Math.random() * 6 - 3;
+                            players[i].referenceRay[j] = new Vector2D();
+                            players[i].referenceRay[j].x = players[i].pos.x + 36 * Math.cos(players[i].playerFacing) - (5 + randSpread) * Math.sin(players[i].playerFacing);
+                            players[i].referenceRay[j].y = players[i].pos.y + 36 * Math.sin(players[i].playerFacing) + (5 + randSpread) * Math.cos(players[i].playerFacing);
+
+                        }
+                    }
+
                     players[i].weapon.fire();
                     if(players[i].weapon.shootTimer == 0 && players[i].weapon.currentMag == 0 && players[i].weapon.canReload()) {
                         players[i].weapon.startReload();
@@ -3979,13 +6190,13 @@ function redrawMapBuffer() {
     //loop 3 times for redundancy? later
     //bufferctx.fillStyle='F00';
     //background buffer
-    console.log('filling buffer');
+   // console.log('filling buffer');
     //draw background (below blood)
     for(var f = 0; f < map.floors; f++) {
         canvasBuffer.floor[f].ctx.clearRect(0, 0, canvasBuffer.floor[f].width, canvasBuffer.floor[f].height);
         var bufferctx = canvasBuffer.floor[f].ctx;
         bufferctx.fillStyle = '#000';
-        for(var i = 0; i < tiles[f].length; i++) {
+        /*for(var i = 0; i < tiles[f].length; i++) {
             for(var j = 0; j < tiles[f][i].length; j++) {
                 //  bufferctx.fillStyle = tileTypes[tiles[f][i][j].type];
 
@@ -4004,7 +6215,7 @@ function redrawMapBuffer() {
                     //bufferctx.fillRect(tiles[f][i][j].pos.x,tiles[f][i][j].pos.y,tiles[f][i][j].size,tiles[f][i][j].size);
                 }
             }
-        }
+        }*/
         //fill ground decorations
         bufferctx.drawImage(Images.floorDecals[MAP_NAME][f], 0, 0);
     }
@@ -4012,7 +6223,7 @@ function redrawMapBuffer() {
     for(var f = 0; f < map.floors; f++) {
         canvasBuffer.walls[f].ctx.clearRect(0, 0, canvasBuffer.walls[f].width, canvasBuffer.walls[f].height);
         var bufferctx = canvasBuffer.walls[f].ctx;
-        for(var i = 0; i < tiles[f].length; i++) {
+        /*for(var i = 0; i < tiles[f].length; i++) {
             for(var j = 0; j < tiles[f][i].length; j++) {
                 //bufferctx.fillStyle = tileTypes[tiles[f][i][j].type];
                 if(tiles[f][i][j].type == 'wall') {
@@ -4026,7 +6237,7 @@ function redrawMapBuffer() {
                 }
             }
 
-        }
+        }*/
 
         //draw wall decals
         bufferctx.drawImage(Images.wallDecals[MAP_NAME][f], 0, 0);
@@ -4086,7 +6297,7 @@ function renderAssets(context) {
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.globalAlpha = 0.35;
             ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, canvases[0].canvas.width, canvases[0].canvas.height);
             ctx.globalAlpha = 1;
             //ctx.setTransform(1,0,0,1,-Math.floor(gameCamera.x),-Math.floor(gameCamera.y));
             ctx.setTransform(1, 0, 0, 1, -(gameCamera.x), -(gameCamera.y));
@@ -4107,8 +6318,32 @@ function renderAssets(context) {
         ctx.drawImage(canvasBuffer.blood[f], gameCamera.x, gameCamera.y, w, h, gameCamera.x, gameCamera.y, w, h);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
+        //sat objects
+            //ctx.globalAlpha = 0.35;
+            ctx.fillStyle = '#784300';
+            for(var i = 0; i < obstacleContainer.obstacles.length; i++) 
+                if(obstacleContainer.obstacles[i].floor == f && obstacleContainer.obstacles[i].type == 'window') {
+                if(getMapClass().getWindowById(obstacleContainer.obstacles[i].id).health > 0) {obstacleContainer.obstacles[i].draw(ctx)};
+            }
+            ///
+            //ctx.globalAlpha = 1;
         ctx.drawImage(canvasBuffer.walls[f], gameCamera.x, gameCamera.y, w, h, gameCamera.x, gameCamera.y, w, h);
 
+        //doors
+        for(var d = 0; d < getMap().doors.length; d++) {
+            var d_var = getMap().doors[d];
+           // console.log(d_var);
+            if(d_var.active){
+                for(var g = 0; g<d_var.graphics.length; g++) {
+                    if(d_var.graphics[g].floor == f) {
+                        //ctx.fillRect(d_var.graphics[g].x, d_var.graphics[g].y, 50,50);
+                        ctx.drawImage(d_var.graphics[g].image, d_var.graphics[g].x, d_var.graphics[g].y);
+                    }
+                }
+            }
+        }
+        //end doors
+        
 
         // end PROBLEM AREA
 
@@ -4144,20 +6379,63 @@ function renderAssets(context) {
             }
         }
 
+        var puList = getMap().powerups
+        for(var i = 0; i < puList.length; i++) {
+            if(puList[i].dropped && puList[i].floor == f) {
+                ctx.translate(puList[i].pos.x, puList[i].pos.y);
+                ctx.rotate(puList[i].rotation);
+                if((puList[i].lifeLeft < 16 && puList[i].lifeLeft % 2 == 0) ||
+                   (puList[i].lifeLeft < 8 && puList[i].lifeLeft % 1 == 0) ||
+                   (puList[i].lifeLeft < 4 && puList[i].lifeLeft % 0.5 == 0)) {
+                    //blinking;
+                    ctx.drawImage(Images.powerupGlow, -16, -16, 32, 32);
+                }
+                else if(puList[i].type == '2xp') {
+                    ctx.drawImage(Images.doublePoints, -16, -16, 32, 32);
+                }
+                else if(puList[i].type == 'ik') {
+                    ctx.drawImage(Images.instaKill, -16, -16, 32, 32);
+                }
+                else if(puList[i].type == 'ma') {
+                    ctx.drawImage(Images.maxAmmo, -16, -16, 32, 32);
+                }
+                else if(puList[i].type == 'nuke') {
+                    ctx.drawImage(Images.nuke, -16, -16, 32, 32);
+                }
+                else if(puList[i].type == 'carpenter') {
+                    ctx.drawImage(Images.carpenter, -16, -16, 32, 32);
+                }
+                else{
+                //ctx.fillCircle(getMap().powerups[i].pos.x,getMap().powerups[i].pos.y, 10);
+                }
+
+                ctx.rotate(-puList[i].rotation);
+                ctx.translate(-puList[i].pos.x, -puList[i].pos.y);
+
+            }
+        }
+
     }
 
 
 
     /* ctx.fillStyle='#00FF00';
      */
-    /* ctx.font = "7px sans-serif";
+     /*
+    ctx.font = "7px sans-serif";
      ctx.fillStyle="#F80";
      for(var i =0;i<dijkstraMap.map.height;i++){
          for(var j=0;j<dijkstraMap.map.width;j++){
-             ctx.fillText(dijkstraMap.cells[i][j].toString(), 3+(j%dijkstraMap.map.width)*tileSize,12+i*tileSize);
+             ctx.fillText(dijkstraMap.cells[0][i][j].toString(), 3+(j%dijkstraMap.map.width)*tileSize,12+i*tileSize);
          }
-     }*/
-
+     }
+     ctx.fillStyle="#F00";
+     for(var i =0;i<dijkstraMap.map.height;i++){
+         for(var j=0;j<dijkstraMap.map.width;j++){
+             ctx.fillText(dijkstraMap.cells[1][i][j].toString(), 8+(j%dijkstraMap.map.width)*tileSize,24+i*tileSize);
+         }
+     }
+    */
 
     /*  ctx.beginPath();
       ctx.strokeStyle = '#FF0000';
@@ -4168,7 +6446,8 @@ function renderAssets(context) {
     for(var i = 0; i < NUM_PLAYERS; i++) {
         if(players[i].drawLaser > 0 && players[i].currentFloor == gameCamera.floor) {
             //console.log('drawlaser');
-            ctx.lineWidth = 1;
+            
+            ctx.lineWidth = 0.8;
             ctx.beginPath();
             ctx.strokeStyle = '#FF0';
             //  ctx.strokeStyle = '#000';
@@ -4176,11 +6455,18 @@ function renderAssets(context) {
                 ctx.strokeStyle = '#0F0';
                 ctx.lineWidth = 4;
             }
+            if(players[i].weapon.internalName == 'doublebarreled') {
+                ctx.lineWidth = 0.25;
+               
+            }
             //ctx.globalCompositeOperation='lighten';
             //ctx.globalAlpha=0.5;
-            ctx.moveTo(players[i].ray[0].x, players[i].ray[0].y);
-            ctx.lineTo(players[i].ray[1].x, players[i].ray[1].y);
-            ctx.stroke();
+            //draw each bullet
+            for(var j = 1; j < players[i].ray.length; j++) {
+                ctx.moveTo(players[i].ray[0].x, players[i].ray[0].y);
+                ctx.lineTo(players[i].ray[j].x, players[i].ray[j].y);
+                ctx.stroke();
+            }
             // ctx.globalAlpha = 1;
             //ctx.globalCompositeOperation='source-over';
 
@@ -4198,6 +6484,9 @@ function renderAssets(context) {
         if(gameCamera.floor == players[p].currentFloor) {
             if(players[p].down) {
                 ctx.globalAlpha = 0.65;
+            }
+            if(players[p].dead) {
+                ctx.globalAlpha = 0;
             }
             ctx.translate((players[p].pos.x), (players[p].pos.y));
             ctx.rotate(players[p].playerFacing + Math.PI / 2);
@@ -4279,6 +6568,7 @@ function renderAssets(context) {
     //  secondCanvas.ctx.drawImage(canvas,-100,-100,CANVAS_WIDTH,CANVAS_HEIGHT,0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
     //ctx.drawImage(Images.hpbar,sourcex,0,sourcewidth,50,destx,h-50,sourcewidth,50);
 
+    
 }
 
 function renderHud(ctx, playerNum = 0) {
@@ -4296,7 +6586,9 @@ function renderHud(ctx, playerNum = 0) {
         ctx.globalAlpha = 1;
         ctx.drawImage(Images.reloadIndicator, 0, 0, 32, 32, -16, -16, 32, 32);
         //empty
-        var maxTime = Math.floor(players[p].weapon.reloadTime * 60);
+
+        //changed to last reload time for variable reload weapons
+        var maxTime = Math.floor(players[p].weapon.lastReloadTime * 60);
         var pctComplete = (maxTime - players[p].weapon.reloadTimer) / maxTime;
         // console.log(pctComplete);
         ctx.globalAlpha = 0.5;
@@ -4304,6 +6596,28 @@ function renderHud(ctx, playerNum = 0) {
 
         ctx.translate(-(-gameCamera.x + players[p].pos.x), -(-gameCamera.y + players[p].pos.y - 32));
 
+    }
+
+    for(var i = 0; i < NUM_PLAYERS; i++) {
+        if(players[i].currentReviver == p) {
+
+            ctx.translate(-gameCamera.x + players[p].pos.x, -gameCamera.y + players[p].pos.y - 32);
+            //img, sx, sy, sw, sh, dx, dy, dw, dh
+            //full
+            ctx.globalAlpha = 1;
+            ctx.drawImage(Images.reviveIndicator, 0, 0, 32, 32, -16, -16, 32, 32);
+            //empty
+
+            //changed to last reload time for variable reload weapons
+            var maxHealth = 100;
+            var pctComplete = (maxHealth - players[i].reviveMeter) / maxHealth;
+            // console.log(pctComplete);
+            ctx.globalAlpha = 0.5;
+            ctx.drawImage(Images.reviveIndicator, 32, 0, 32, 32 * (pctComplete), -16, -16, 32, 32 * (pctComplete));
+            ctx.drawImage(Images.reviveIndicator, 64, 32 * (pctComplete), 32, 32 * (1-pctComplete), -16, -16 + 32 * (pctComplete), 32, 32 * (1-pctComplete));
+            ctx.translate(-(-gameCamera.x + players[p].pos.x), -(-gameCamera.y + players[p].pos.y - 32));
+
+        }
     }
 
 
@@ -4314,16 +6628,26 @@ function renderHud(ctx, playerNum = 0) {
     var sourcex = 5 + ((100 - players[p].health) / 100) * 122;
     var sourcewidth = 160 - 5 - ((100 - players[p].health) / 100) * 122;
     var destx = w - 160 + sourcex;
-    ctx.drawImage(Images.hpbar, sourcex, 0, sourcewidth, 50,
+    if(players[p].down == false) {
+        ctx.drawImage(Images.hpbar, sourcex, 0, sourcewidth, 50,
         destx, h - 50, sourcewidth, 50);
+    }
+    else {
+        ctx.drawImage(Images.bleedoutbar, sourcex, 0, sourcewidth, 50,
+        destx, h - 50, sourcewidth, 50);
+    }
     ctx.globalAlpha = 1;
     ctx.drawImage(Images.hudbase, w - 160, h - 50);
     ctx.font = "14px sans-serif";
-    if(players[p].weapon.currentMag <= Math.max(2, players[p].weapon.magSize * 0.2)) {
-        ctx.fillStyle = "#C54";
-    } else {
-        ctx.fillStyle = "#000";
+    
+    ctx.fillStyle = "#000";
+    if(players[p].weapon.specialType == 'shotgun') {
+        if(players[p].weapon.currentMag < 2) {ctx.fillStyle = "#C54";}
     }
+    else if(players[p].weapon.currentMag <= Math.max(2, players[p].weapon.magSize * 0.2)) {
+        ctx.fillStyle = "#C54";
+    } 
+    
     ctx.textAlign = "right";
     ctx.fillText(players[p].weapon.currentMag.toString(), w - 75, h - 15);
     ctx.textAlign = "left";
@@ -4335,18 +6659,53 @@ function renderHud(ctx, playerNum = 0) {
     }
     ctx.fillText('/ ' + players[p].weapon.currentReserve.toString(), w - 73, h - 15);
 
-    ctx.drawImage(Images.weaponIcon[players[p].weapon.internalName], w - 50, h - 50);
+    if(Images.weaponIcon[players[p].weapon.internalName]) {
+    ctx.drawImage(Images.weaponIcon[players[p].weapon.internalName], w - 50, h - 50);}
 
     ctx.font = "20px sans-serif";
     ctx.textAlign = "center";
     ctx.fillStyle = '#FFF'
-    ctx.fillText(players[p].displayTooltip, w / 2, h - 20);
+    ctx.fillText(players[p].displayTooltip, w / 2, h - 70);
     ctx.textAlign = 'right';
     ctx.font = "20px sans-serif";
     ctx.fillText('$' + players[p].money, w - 7, h - 55);
 
+    //center icons
+    var puIconsX = w/2 - 32;
+    puIconsX -= (roundManager.numActivePowerups()-1)*32;
 
+    if(roundManager.powerups.doublePoints.enabled) {
+        if((roundManager.powerups.doublePoints.timer < 16 && roundManager.powerups.doublePoints.timer % 2 == 0) ||
+                   (roundManager.powerups.doublePoints.timer < 8 && roundManager.powerups.doublePoints.timer % 1 == 0) ||
+                   (roundManager.powerups.doublePoints.timer < 4 && roundManager.powerups.doublePoints.timer % 0.5 == 0)) {
+                    //blinking;
+                    //do nothing and leave space
+        }
+        else{ctx.drawImage(Images.doublePointsHud, puIconsX, h-64);}
+        puIconsX += 64;
+    }
+    if(roundManager.powerups.instaKill.enabled) {
+        if((roundManager.powerups.instaKill.timer < 16 && roundManager.powerups.instaKill.timer % 2 == 0) ||
+                   (roundManager.powerups.instaKill.timer < 8 && roundManager.powerups.instaKill.timer % 1 == 0) ||
+                   (roundManager.powerups.instaKill.timer < 4 && roundManager.powerups.instaKill.timer % 0.5 == 0)) {
+                    //blinking;
+                    //do nothing and leave space
+        }
+        else{
+            ctx.drawImage(Images.instaKillHud, puIconsX, h-64);
+        }
+        puIconsX += 64;
+    }
+   
 
+    //weapon name on switch
+    if(players[p].weapon.weaponSwitchTimer > 0) {
+        ctx.globalAlpha = Math.min(1,players[p].weapon.weaponSwitchTimer/35);
+        ctx.textAlign = "end";
+        ctx.font = '16px sans-serif';
+        ctx.fillText(players[p].weapon.name, w-115, h-13);
+        ctx.globalAlpha = 1;
+    }
 
     //red effect when dead
     if(players[p].down == true) {
@@ -4405,12 +6764,21 @@ function getMap() {
     return map;
 }
 
+function getMapClass() {
+    return mapClassInstance;
+}
+
 
 function mouseMove(e) {
-    gameCamera.follow(players[0]);
-    var rect = canvas.getBoundingClientRect();
-    mousePos.x = e.clientX - rect.left + gameCamera.x;
-    mousePos.y = e.clientY - rect.top + gameCamera.y;
+
+    //follow code fixes aiming issue
+    //gameCamera.follow(players[0],0);
+
+    var rect = canvases[0].canvas.getBoundingClientRect();
+    //mousePos.x = e.clientX - rect.left + gameCamera.x;
+    //mousePos.y = e.clientY - rect.top + gameCamera.y;
+    mousePos.x = e.clientX - rect.left + gameCamera.prevxs[0];
+    mousePos.y = e.clientY - rect.top + gameCamera.prevys[0];
     keyboardInput.angle = Math.atan2(mousePos.y - players[0].pos.y, mousePos.x - players[0].pos.x)
     var vec = new Vector2D();
     vec.y = mousePos.y - players[0].pos.y;
@@ -4445,7 +6813,7 @@ function updateZombiePath() {
         if(zombies[i].alive) {
             // future - add penalty to paths already being travelled on somehow to avoid zombie trains
             // simpler - add 'favourite direction' to zombie, up left down or right to create more splits
-            zombies[i].path = dijkstraMap.findPath(zombies[i].pos.x, zombies[i].pos.y, zombies[i].currentFloor);
+            zombies[i].path = dijkstraMap.findPath(zombies[i].pos.x, zombies[i].pos.y, zombies[i].currentFloor, zombies[i].preference);
         }
     }
 }
@@ -4577,9 +6945,22 @@ function checkProximityActions() {
                 // if(players[0].currentFloor==actions.floor){
                 for(var t = 0; t < actions.triggers.length; t++) {
                     if(players[p].currentFloor == actions.triggers[t].floor && Vector2D.distance(players[p].pos, actions.triggers[t].pos, true) < actions.triggers[t].radius ** 2) {
-                        players[p].displayTooltip = actions.tooltip;
+                        players[p].displayTooltip = actions.tooltip + actions.tooltipFunction(p);
                         if(players[p].action && players[p].money >= actions.price) {
-                            actions.customFunction();
+
+                            //run custom action
+                            //at the moment only windows return true when they can be interacted with
+                            //so reward player
+                            if(actions.customFunction()==true) {
+                                //add limit on repair bonus per round
+                                if(actions.type == 'window' && players[p].roundRepairMoney < Math.min(490,40 + (roundManager.getRound()-1)*50)){
+                                    if(getMapClass().getWindowById(actions.windowId).repairCount < 7) {  
+                                    //also limit to 6 rewarded repairs per window per round  
+                                        players[p].money += actions.reward * (1 + roundManager.powerups.doublePoints.enabled);
+                                        players[p].roundRepairMoney += actions.reward;
+                                    }
+                                } 
+                            }
 
                             if(actions.singleUse) { //only run once
                                 for(var tr = 0; tr < actions.triggers.length; tr++) {
@@ -4591,13 +6972,16 @@ function checkProximityActions() {
 
                                 if(players[p].weapon.internalName != actions.gunName) {
 
+                                    //purchase weapon
                                     if(!players[p].hasWeapon(actions.gunName)) {
                                         players[p].money -= actions.price;
                                         players[p].addWeapon(actions.gunName);
                                         Sounds.playSound('purchase');
 
+
                                     }
                                 } else {
+                                    //purchase ammo
                                     if(players[p].weapon.currentReserve < players[p].weapon.maxAmmo) {
                                         players[p].money -= Math.round(actions.price / 2);
                                         players[p].weapon.currentReserve = players[p].weapon.maxAmmo;
@@ -4616,9 +7000,18 @@ function checkProximityActions() {
                                     getTiles()[actions.doorCoords[i].floor][actions.doorCoords[i].y][actions.doorCoords[i].x].passable = true;
                                     getTiles()[actions.doorCoords[i].floor][actions.doorCoords[i].y][actions.doorCoords[i].x].shootThrough = true;
 
-                                    map.floor[actions.doorCoords[i].floor].data = map.floor[actions.doorCoords[i].floor].data.substring(0, map.width * actions.doorCoords[i].y + actions.doorCoords[i].x) + actions.doorCoords[i].type + map.floor[actions.doorCoords[i].floor].data.substring(map.width * actions.doorCoords[i].y + actions.doorCoords[i].x + 1);
+                                    getMapClass().setTileType(actions.doorCoords[i].type,actions.doorCoords[i].x,actions.doorCoords[i].y,actions.doorCoords[i].floor);
+                                    //map.floor[actions.doorCoords[i].floor].data = map.floor[actions.doorCoords[i].floor].data.substring(0, map.width * actions.doorCoords[i].y + actions.doorCoords[i].x) + actions.doorCoords[i].type + map.floor[actions.doorCoords[i].floor].data.substring(map.width * actions.doorCoords[i].y + actions.doorCoords[i].x + 1);
                                     dijkstraMap.map.floor[actions.doorCoords[i].floor].data = dijkstraMap.map.floor[actions.doorCoords[i].floor].data.substring(0, map.width * actions.doorCoords[i].y + actions.doorCoords[i].x) + 'Y' + dijkstraMap.map.floor[actions.doorCoords[i].floor].data.substring(map.width * actions.doorCoords[i].y + actions.doorCoords[i].x + 1);
+                                    dijkstraMap.resetGrid(true); //full reset
+                                    var obs = obstacleContainer.GetObstaclesById(actions.doorId);
+                                    for(var j = 0; j < obs.length; j++) {
+                                        obs[j].enabled = false;
+                                    }
+                                    getMapClass().getDoorById(actions.doorId).active = false;
+
                                 }
+                                Sounds.playSound('dooropen');
                                 //  console.log(map.data[actions.doorCoord.y]);
                                 if(actions.price > 0) {
                                     Sounds.playSound('purchase');
@@ -4629,7 +7022,7 @@ function checkProximityActions() {
                         }
                         //fix bug where you couldn't buy ammo if you didn't have the full price
                         //instead of making a separate action to buy ammo... which I might do later
-                        else if(players[p].action && players[p].money >= Math.round(actions.price / 2)) {
+                        else if(actions.type == 'gun' && players[p].action && players[p].money >= Math.round(actions.price / 2)) {
                             if(players[p].weapon.internalName == actions.gunName) {
 
                                 if(players[p].weapon.currentReserve < players[p].weapon.maxAmmo) {
@@ -4640,17 +7033,52 @@ function checkProximityActions() {
                             }
                         }
 
-
-
-
-                        if(actions.type == 'teleport') {
-                            console.log('teleport)');
+                        else if(actions.type == 'teleport') {
+                            //console.log('teleport)');
                             players[p].currentFloor = actions.teleportConditions.floor;
 
                             //  redrawMapBuffer();
 
 
                         }
+                        //make sure that you can always revive a player as a priority?
+                        if(actions.type == 'revive' && players[p].action && players[p].isMeleeing == false) {
+                         
+                            var downedPlayerId = Number(actions.id.slice(-1));
+                            var isReviving = false;
+                            for(var i = 0; i < downedPlayerId; i++) {
+                                if(players[i].currentReviver == p) {
+                                    isReviving = true;
+                                }
+                            }
+                            if(!isReviving && (players[downedPlayerId].currentReviver == -1 || players[downedPlayerId].currentReviver == p)) {
+                                //ok to revive
+
+                                //cancel reload
+                                players[p].weapon.reloading = false;
+                                players[p].weapon.reloadTimer = 0;
+
+                                players[downedPlayerId].currentReviver = p;
+                                players[downedPlayerId].reviveHealthAmount = 0.45;
+                            }
+                        }
+
+                        else if(actions.type == 'mysteryboxbuy' && players[p].action && players[p].money >= actions.price) {
+                            players[p].money -= actions.price;
+                            MysteryBox.purchase(p);
+                        }
+                        else if(actions.type == 'mysteryboxgun' && players[p].action && actions.owner == p) {
+                            if(players[p].weapon.internalName != actions.gunName && !players[p].hasWeapon(actions.gunName)) {
+                                players[p].addWeapon(actions.gunName);
+                                MysteryBox.endCycle();
+                            }       
+                        }
+
+
+
+
+
+
                         /* if(actions.type=='customPassive'){
                              actions.customFunction();
                          }*/
@@ -4663,6 +7091,18 @@ function checkProximityActions() {
 
             }
 
+        }
+
+         //check powerups
+        for(var i = 0; i < getMap().powerups.length; i++) {
+            var powerup = getMap().powerups[i];
+            if(powerup.floor == players[p].currentFloor && powerup.dropped == true) {
+                //console.log(Vector2D.distance(powerup.pos,players[p].pos));
+               if(Vector2D.distance(powerup.pos,players[p].pos) < 18) {
+                //console.log('picked up powerup '+powerup.floor);
+                powerup.activate();
+               } 
+            }
         }
 
     }
@@ -4679,6 +7119,8 @@ function checkProximityActions() {
                 }
             }
         }
+
+
 
     }
 
@@ -4750,6 +7192,10 @@ function endGame() {
 
 }
 
+function spawnPowerup(x,y,f) {
+    getMap().powerups.push(new Powerup(x,y,f));
+}
+
 function AngleDifference(angle1, angle2) {
     var diff = (angle2 - angle1 + Math.PI) % (2 * Math.PI) - Math.PI;
     return diff < -Math.PI ? diff + 2 * Math.PI : diff;
@@ -4797,6 +7243,39 @@ function getActionsById(id) {
     return actionList;
 
 }
+
+function chooseZombieSpawn() {
+
+    var options = [];
+
+    for(var i = 0; i < getMap().zombieSpawns.length; i++) {
+        if(getMap().zombieSpawns[i].enabled) {
+            options.push(i);
+        }
+    }
+  //  console.log(options);
+    return getMap().zombieSpawns[options[Math.floor(Math.random()*options.length)]];
+}
+
+function shuffle(array) {
+  var currentIndex = array.length, temporaryValue, randomIndex;
+
+  // While there remain elements to shuffle...
+  while (0 !== currentIndex) {
+
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex -= 1;
+
+    // And swap it with the current element.
+    temporaryValue = array[currentIndex];
+    array[currentIndex] = array[randomIndex];
+    array[randomIndex] = temporaryValue;
+  }
+
+  return array;
+}
+
 
 function activateCheats() {
     players[0].godmode = 1;

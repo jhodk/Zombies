@@ -2,6 +2,8 @@
 
 <html>
 <head>
+<meta http-equiv="Content-Language" content="en">
+<link rel="shortcut icon" type="image/png" href="images/favicon.png"/>
 <title>Zombies - 2D Co-op Survival Shooter</title>
 <style>
 
@@ -11,7 +13,7 @@ canvas {
 margin:2px;
  display:inline-block;
     width:640px;
-    height:480px;
+    height:320px;
 }
 #container,#container2 {
     
@@ -52,12 +54,12 @@ input[type=checkbox]
 </head>
 <body>
 <h1>
+<span style="display:none">The quick brown fox jumped over the lazy dog</span>
 <!--<div id='fps'></div></h1>-->
 <div id='container' style="display:none">
-<canvas id='cvs' width=640px height=480px>Loading...</canvas>
+<!--<canvas id='cvs' width=640px height=320px>Loading...</canvas>-->
 </div>
 <div id='container2'>
-
 </div>
 
 <div id='menu'>
@@ -69,6 +71,8 @@ input[type=checkbox]
 Map: <span id='mapname'>Nacht der Untöten</span><br>
 <button type="button" onmousedown=selectMap('ndu');>Nacht der Untöten</button>
 <button type="button" onmousedown=selectMap('vkt');>Verrückt</button>
+<button type="button" onmousedown=selectMap('five');>Five</button>
+<button type="button" onmousedown=selectMap('test');>Test Map</button>
 <br>
 Players: <span id='playercount'>1</span><br>
 <button type="button" onmousedown=selectPlayers(1);>1</button>
@@ -76,7 +80,13 @@ Players: <span id='playercount'>1</span><br>
 <button type="button" onmousedown=selectPlayers(3);>3</button>
 <button type="button" onmousedown=selectPlayers(4);>4</button>
 <br>
-P1 uses controller? <input type="checkbox" id="p1controller" onclick="Sounds.playSprite('gunEmpty', 'short')"></input>
+P1 uses controller? <input type="checkbox" id="p1controller" onclick=checkboxClicked();></input>
+<br>
+Resolution: <span id='resolution'>640x480</span><br>
+<button type="button" onmousedown=selectResolution(640,480);>640x480</button>
+<button type="button" onmousedown=selectResolution(512,384);>512x384</button>
+<button type="button" onmousedown=selectResolution(1024,576);>1024x576</button>
+<button type="button" onmousedown=selectResolution(820,460);>820x460</button>
 <br>
 <a style="text-decoration:none;color:#9a0300" href='#' onclick=startGame();>Start Game</a>
 
@@ -104,7 +114,36 @@ P1 uses controller? <input type="checkbox" id="p1controller" onclick="Sounds.pla
 <script src="input.js"></script>
 <script src="weapons.js"></script>
 <script src="player.js"></script>-->
-<script>document.onselectstart = function() { return false; };</script>
+<script>
+document.onselectstart = function() { return false; };
+
+var s = document.styleSheets[0];
+
+//console.log(s);
+
+function changeStylesheetRule(stylesheet, selector, property, value) {
+	selector = selector.toLowerCase();
+	property = property.toLowerCase();
+	value = value.toLowerCase();
+
+	for(var i = 0; i < s.cssRules.length; i++) {
+		var rule = s.cssRules[i];
+		if(rule.selectorText === selector) {
+			rule.style[property] = value;
+			return;
+		}
+	}
+  
+	stylesheet.insertRule(selector + " { " + property + ": " + value + "; }", 0);
+}
+
+//changeStylesheetRule(s, "body", "color", "rebeccapurple");
+//changeStylesheetRule(s, "p", "border", "1px solid rebeccapurple");
+changeStylesheetRule(s, "canvas", "width", "640px");
+changeStylesheetRule(s, "canvas", "height", "480px");
+
+//console.log(s);
+</script>
 <script src="input.js"></script>
 <script src="mousetrap.js"></script>
 <script src="howler.js"></script>
@@ -112,18 +151,52 @@ P1 uses controller? <input type="checkbox" id="p1controller" onclick="Sounds.pla
 <script>
 var menuPlayers = 1;
 var menuMap = 'ndu';
-function selectPlayers(n) {
+var resWidth = 640;
+var resHeight = 480;
+
+if(localStorage.getItem('resolution') !== null) {
+	var res = JSON.parse(localStorage.getItem('resolution'));
+	selectResolution(res[0],res[1],false);
+}
+if(localStorage.getItem('playercount') !== null) {
+	var pc = JSON.parse(localStorage.getItem('playercount'));
+	selectPlayers(pc,false);
+
+}
+if(localStorage.getItem('mapname') !== null) {
+	var m = JSON.parse(localStorage.getItem('mapname'));
+	selectMap(m,false);
+}
+if(localStorage.getItem('p1controller') !== null) {
+	document.getElementById('p1controller').checked = JSON.parse(localStorage.getItem('p1controller'));
+}
+//selectMap('test');
+function selectPlayers(n, sound = true) {
 	document.getElementById('playercount').textContent = n;
 	menuPlayers = n;
-	Sounds.playSprite('gunEmpty', 'short');
+	localStorage.setItem('playercount',JSON.stringify(menuPlayers));
+	if(sound) {Sounds.playSprite('gunEmpty', 'short');}
 }
-function selectMap(m) {
+function checkboxClicked() {
+	localStorage.setItem('p1controller',JSON.stringify(document.getElementById('p1controller').checked));
+}
+function selectMap(m,sound = true) {
 	document.getElementById('mapname').textContent = Maps.getName(m);
 	menuMap = m;
-	Sounds.playSprite('gunEmpty', 'short');
+	if(sound) {Sounds.playSprite('gunEmpty', 'short');}
 	document.getElementById('thumb').src = 'images/maps/' + m + '/' + m + 'thumb.png';
+	localStorage.setItem('mapname',JSON.stringify(menuMap));
 }
-function toggleControls() {
+function selectResolution(x,y,sound = true) {
+	document.getElementById('resolution').textContent = x + 'x' + y;
+	resWidth = x;
+	resHeight = y;
+	changeStylesheetRule(s, "canvas", "width", resWidth + "px");
+	changeStylesheetRule(s, "canvas", "height", resHeight + "px");
+	localStorage.setItem('resolution', JSON.stringify([x,y]));
+	if(sound) {Sounds.playSprite('gunEmpty', 'short');}
+}
+function toggleControls(sound=true) {
 	list = document.getElementById('controllist');
 	if(list.style.display == ''){
 		list.style.display = 'none';
@@ -131,13 +204,18 @@ function toggleControls() {
 	else{
 		list.style.display = '';
 	}
+	if(sound) {Sounds.playSprite('gunEmpty', 'short');}
 }
 function startGame() {
 	document.getElementById('menu').style.display = 'none';
 	document.getElementById('container').style.display = '';
 	Sounds.playSound('raygunfire');
-	init(menuMap, menuPlayers);
+	//console.log(menuMap);
+	init(menuMap, menuPlayers, resWidth, resHeight);
+	
 	KEYBOARD_INPUT = !document.getElementById('p1controller').checked;
+	//call gamepad update function again just in case it threw an error earlier
+	updateStatus();
 }
 </script>
 
