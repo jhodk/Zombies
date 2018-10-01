@@ -7,3 +7,13 @@ Inspired by Call of Duty World At War and Black Ops.
 
 http://store.steampowered.com/app/10090/Call_of_Duty_World_at_War/
 http://store.steampowered.com/app/42700/Call_of_Duty_Black_Ops/
+
+The levels are still very much a work in progress, with Nacht der Untöten being the most complete
+The weapons currently in the game are:
+- M1911
+- Kark98k
+- M1 Carbine
+- M1 Thompson
+- BAR
+- Double-barreled Shotgun
+- Ray Gun
