@@ -32,4 +32,4 @@ The weapons currently in the game are:
 - SPAS-12
 - Spectre
 - Python
-- l96A1
+- L96A1
