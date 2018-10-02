@@ -18,3 +18,18 @@ The weapons currently in the game are:
 - BAR
 - Double-barreled Shotgun
 - Ray Gun
+- Missing sounds/icons from this point:
+- Commando
+- RPK
+- CZ75
+- AUG
+- FAMAS
+- HK21
+- HS-10
+- Galil
+- Dragunov
+- FN FAL
+- SPAS-12
+- Spectre
+- Python
+- l96A1
