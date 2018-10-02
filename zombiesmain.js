@@ -3274,7 +3274,29 @@ class ImageManager {
 
 class MysteryBoxManager {
     constructor() {
-        this.rewards = ['M1911', 'Kar98k', 'M1Carbine', 'M1Thompson', 'raygun', 'BAR', 'doublebarreled'];
+        //will make rewards map-specific if enough progress is made
+        this.rewards = [//'M1911',
+                        //'Kar98k', 
+                        //'M1Carbine', 
+                        //'M1Thompson', 
+                        'raygun', 
+                        //'BAR', 
+                        'doublebarreled',
+                        'commando',
+                        'rpk',
+                        'cz75',
+                        'aug',
+                        'famas',
+                        'hk21',
+                        'hs-10',
+                        'galil',
+                        'dragunov',
+                        'fnfal',
+                        'spas-12',
+                        'spectre',
+                        'python',
+                        'l96a1']; 
+
         this.defaultboxid = 'mb1';
         this.currentboxid = this.defaultboxid;
         this.numBoxes = 1;
@@ -3287,6 +3309,7 @@ class MysteryBoxManager {
     }
     purchase(p) {
         Sounds.playSound('mysterybox');
+        Sounds.playSound('purchase')
         getActionsById(this.currentboxid)[0].triggers[0].radius = 0;
         var mbreference = this.currentboxid + 'gun';
         this.lastUser = p;
@@ -3295,6 +3318,7 @@ class MysteryBoxManager {
     }
 
     chooseGunName() {
+        //could exclude guns the player already has?
         this.currentWeaponObj = new Weapon(this.rewards[Math.floor(Math.random() * this.rewards.length)]);
         return this.currentWeaponObj.internalName;
     }
@@ -3592,7 +3616,7 @@ class Weapon {
             this.startingAmmo = 220;
             this.semiAuto = false;
             this.fireRate = 5;
-            this.damage = 120;
+            this.damage = 110;
             this.reloadTime = 2.7;
             this.range = 'na';
             this.penetration = 'full';
@@ -3617,8 +3641,8 @@ class Weapon {
             this.rotateSpeed = 8;
         }
 
-        // will need a lot of special logic for this
-         if(type == 'doublebarreled') {
+        
+        if(type == 'doublebarreled') {
             this.name = 'Double-Barreled Shotgun';
             this.internalName = 'doublebarreled';
             this.specialType = 'shotgun';
@@ -3629,19 +3653,19 @@ class Weapon {
             this.semiAuto = true;
             this.fireRate = 4;
             this.damage = 150;
-            //will add extra reload time when empty as an exception
+            //will add extra reload time when empty as an exception at some point
             this.reloadTime = 2.65;
 
             this.range = 200;
             this.penetration = 'full';
-            this.penetrationMult = 0.8;
+            this.penetrationMult = 0.7;
             this.stoppingPower = 30;
             this.rotateSpeed = 8;
         }
 
         if(type == 'famas') {
             this.name = 'FAMAS';
-            this.internalName = 'FAMAS';
+            this.internalName = 'famas';
             this.magSize = 30;
             this.maxAmmo = 120; 
             this.startingAmmo = 150;
@@ -3651,9 +3675,236 @@ class Weapon {
             this.reloadTime = 3.3;
             this.range = 'na';
             this.penetration = 'full';
-            this.penetrationMult = 0.95;
-            this.stoppingPower = 25;
+            this.penetrationMult = 0.8;
+            this.stoppingPower = 22;
             this.rotateSpeed = 7;
+        }
+
+        if(type == 'commando') {
+            this.name = 'Commando';
+            this.internalName = 'commando';
+            this.magSize = 30;
+            this.maxAmmo = 240; 
+            this.startingAmmo = 270;
+            this.semiAuto = false;
+            this.fireRate = 5;
+            this.damage = 125;
+            this.reloadTime = 2.55;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.8;
+            this.stoppingPower = 23;
+            this.rotateSpeed = 6;
+        }
+
+        if(type == 'rpk') {
+            this.name = 'RPK';
+            this.internalName = 'rpk';
+            this.magSize = 100;
+            this.maxAmmo = 400; 
+            this.startingAmmo = 500;
+            this.semiAuto = false;
+            this.fireRate = 5;
+            this.damage = 120;
+            this.reloadTime = 5.5;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.85;
+            this.stoppingPower = 25;
+            this.rotateSpeed = 13;
+        }
+
+        if(type == 'cz75') {
+            this.name = 'CZ75';
+            this.internalName = 'cz75';
+            this.magSize = 15;
+            this.maxAmmo = 135; 
+            this.startingAmmo = 150;
+            this.semiAuto = true;
+            this.fireRate = 6;
+            this.damage = 125;
+            this.reloadTime = 2;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.55;
+            this.stoppingPower = 15;
+            this.rotateSpeed = 3;
+        }
+
+        if(type == 'aug') {
+            this.name = 'AUG';
+            this.internalName = 'aug';
+            this.magSize = 30;
+            this.maxAmmo = 270; 
+            this.startingAmmo = 300;
+            this.semiAuto = false;
+            this.fireRate = 4;
+            this.damage = 115;
+            this.reloadTime = 3.05;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.8;
+            this.stoppingPower = 24;
+            this.rotateSpeed = 7;
+        }
+
+        if(type == 'hk21') {
+            this.name = 'HK21';
+            this.internalName = 'hk21';
+            this.magSize = 125;
+            this.maxAmmo = 500; 
+            this.startingAmmo = 625;
+            this.semiAuto = false;
+            this.fireRate = 7;
+            this.damage = 130;
+            this.reloadTime = 4.75;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.85;
+            this.stoppingPower = 26;
+            this.rotateSpeed = 14;
+        }
+
+        if(type == 'hs-10') {
+            this.name = 'HS-10';
+            this.internalName = 'hs-10';
+            this.magSize = 6;
+            this.maxAmmo = 36; 
+            this.startingAmmo = 42;
+            this.semiAuto = true;
+            this.specialType = 'shotgun';
+            this.shotsFired = 8;
+            this.fireRate = 10;
+            this.damage = 130;
+            this.reloadTime = 3.4;
+            this.range = '180'; //if set to na will crash for shotguns
+            this.penetration = 'full';
+            this.penetrationMult = 0.65;
+            this.stoppingPower = 28;
+            this.rotateSpeed = 8;
+        }
+
+        if(type == 'galil') {
+            this.name = 'Galil';
+            this.internalName = 'galil';
+            this.magSize = 35;
+            this.maxAmmo = 315; 
+            this.startingAmmo = 350;
+            this.semiAuto = false;
+            this.fireRate = 5;
+            this.damage = 125;
+            this.reloadTime = 3.8;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.85;
+            this.stoppingPower = 23;
+            this.rotateSpeed = 7;
+        }
+
+        if(type == 'dragunov') {
+            this.name = 'Dragunov';
+            this.internalName = 'dragunov';
+            this.magSize = 10;
+            this.maxAmmo = 40; 
+            this.startingAmmo = 50;
+            this.semiAuto = true;
+            this.fireRate = 18;
+            this.damage = 550;
+            this.reloadTime = 3.75;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.95;
+            this.stoppingPower = 35;
+            this.rotateSpeed = 12;
+        }
+        
+        //skip g11 for now - need burst fire code
+
+        if(type == 'fnfal') {
+            this.name = 'FN FAL';
+            this.internalName = 'fnfal';
+            this.magSize = 20;
+            this.maxAmmo = 180; 
+            this.startingAmmo = 200;
+            this.semiAuto = true;
+            this.fireRate = 6;
+            this.damage = 145;
+            this.reloadTime = 3.1;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.85;
+            this.stoppingPower = 26;
+            this.rotateSpeed = 8;
+        }
+
+        if(type == 'spas-12') {
+            this.name = 'SPAS-12';
+            this.internalName = 'spas-12';
+            this.magSize = 8;
+            this.maxAmmo = 32; 
+            this.startingAmmo = 40;
+            this.semiAuto = true;
+            this.specialType = 'shotgun';
+            this.shotsFired = 8;
+            this.fireRate = 12;
+            this.damage = 120;
+            this.reloadTime = 4.5;
+            this.range = '170'; //if set to na will crash for shotguns
+            this.penetration = 'full';
+            this.penetrationMult = 0.6;
+            this.stoppingPower = 28;
+            this.rotateSpeed = 6;
+        }
+
+        if(type == 'spectre') {
+            this.name = 'Spectre';
+            this.internalName = 'spectre';
+            this.magSize = 30;
+            this.maxAmmo = 120; 
+            this.startingAmmo = 150;
+            this.semiAuto = false;
+            this.fireRate = 4;
+            this.damage = 70;
+            this.reloadTime = 3.0;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.55;
+            this.stoppingPower = 16;
+            this.rotateSpeed = 3;
+        }
+
+        if(type == 'python') {
+            this.name = 'Python';
+            this.internalName = 'python';
+            this.magSize = 6;
+            this.maxAmmo = 84; 
+            this.startingAmmo = 90;
+            this.semiAuto = true;
+            this.fireRate = 6;
+            this.damage = 610;
+            this.reloadTime = 3.9;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.7;
+            this.stoppingPower = 27;
+            this.rotateSpeed = 3;
+        }
+
+        if(type == 'l96a1') {
+            this.name = 'L96A1';
+            this.internalName = 'l96a1';
+            this.magSize = 5;
+            this.maxAmmo = 45; 
+            this.startingAmmo = 50;
+            this.semiAuto = true;
+            this.fireRate = 72;
+            this.damage = 500;
+            this.reloadTime = 3.5;
+            this.range = 'na';
+            this.penetration = 'full';
+            this.penetrationMult = 0.98;
+            this.stoppingPower = 38;
+            this.rotateSpeed = 10;
         }
 
         if(type == 'raygun') {
@@ -3672,6 +3923,8 @@ class Weapon {
             this.stoppingPower = 20;
             this.rotateSpeed = 4;
         }
+
+
 
         this.setupGun();
 
