@@ -1085,7 +1085,7 @@ class Maps {
                         '..........................AW---X---XXXXX' +
                         '...........................X-------X....' +
                         '...........................XXXXXXWXX....' +
-                        '..............................F..A.F....' +
+                        '..............................FF.A.F....' +
                         '.............................F.....F....' +
                         '.............................F.....F....' +
                         '............................F.......F...' +
@@ -1137,7 +1137,10 @@ class Maps {
                                          {x:896,y:32,f:0,enabled:true},
                                          {x:64,y:392,f:0,enabled:true},
                                          {x:88,y:744,f:0,enabled:true},
-                                         {x:368,y:912,f:0,enabled:true}];
+                                         {x:368,y:912,f:0,enabled:true},
+                                         //help room
+                                         {x:1300,y:630,f:0,enabled:false},
+                                         {x:1060,y:950,f:0,enabled:false}];
         this.maps['ndu'].spawnPoints.push({
             x: 22.5 * tileSize,
             y: 9.5 * tileSize,
@@ -1346,6 +1349,9 @@ class Maps {
             getMapClass().setTileType('W',33,23,0);
             getMapClass().setTileType('W',27,21,0);
             getMapClass().setTileType('W',27,17,0); 
+            //help room spawns
+            getMap().zombieSpawns[7].enabled = true;
+            getMap().zombieSpawns[8].enabled = true;
         }
         this.maps['ndu'].actions.push(act);
         this.maps['ndu'].doors.push(new DoorInstance('help_door', [{image: Images.door_small, x: 26 * tileSize, y: 10 * tileSize, floor: 0}]));
@@ -1361,6 +1367,11 @@ class Maps {
         act.doorId = 'ascend_stairs_door';
         act.addDoorCoord(18, 12, 0, '-');
         act.addDoorCoord(18, 12, 1, 'V');
+        act.customFunction = function() {
+            //help room spawns
+            getMap().zombieSpawns[7].enabled = true;
+            getMap().zombieSpawns[8].enabled = true;
+        }
         this.maps['ndu'].actions.push(act);
         this.maps['ndu'].doors.push(new DoorInstance('ascend_stairs_door', [{image: Images.door_small, x: 18 * tileSize, y: 12 * tileSize, floor: 0},
                                                                             {image: Images.door_small, x: 18 * tileSize, y: 12 * tileSize, floor: 1}]));
@@ -3070,7 +3081,18 @@ class SoundManager {
         }
     }
     stopSound(str) {
+        //each Howl sound has a pool of 5 (default) instances to choose from.
+        //instead of making a sound manager instance for each player, could store the id of different sounds in each player
+        //this might be premature optimization, should really test if 4 copies of every sound impacts performance/memory usage
+        //could just make copies of 'important' noticeable sounds within the original class, e.g. all reloading sounds
+        //if done by id, could do id1, id2 etc on each player where id1 is primary reload sound, id2 misc sound e.g. bolt pull
+        //for the moment just making 4 copies of sound manager
+        try{
         this.sounds[str].stop();
+        }
+        catch(e) {
+            console.log('no such sound ' + str + ' exists to stop!');
+        }
     }
     playSprite(str, spr) {
         this.sounds[str].play(spr);
@@ -3388,8 +3410,8 @@ class Player {
         if(this.weaponsList.length > 1) {
             this.hasReleasedFire = false;
             this.fire = false;
-            this.weapon.reloading = false;
-            this.weapon.reloadTimer = 0;
+            this.weapon.interruptReload();
+            
             this.currentWeapon++;
             if(this.currentWeapon == this.weaponsList.length) {
                 this.currentWeapon = 0;
@@ -3435,8 +3457,7 @@ class Player {
         this.down = true;
         this.health = 100;
         this.reviveMeter = 0;
-        this.weapon.reloading = false;
-        this.weapon.reloadTimer = 0;
+        this.weapon.interruptReload();
         this.money = Math.round(this.money * 0.95);
         //assume it exists
         var act = getActionsById('revive_player_' + this.id)[0];
@@ -4005,6 +4026,7 @@ class Weapon {
         this.reloading = true;
         //currently no good way to stop multiple reload sounds playing - 
         //solution: per-player sound manager?
+        var Sounds = SMInstance[this.parentPlayer.id];
         if(this.internalName == 'M1911') {
             Sounds.playSound('M1911reload', 0.25);
         } else if(this.internalName == 'M1Carbine') {
@@ -4023,10 +4045,22 @@ class Weapon {
         }
         this.lastReloadTime = this.reloadTimer/60;
     }
-    endReload() {
+    endReload() { //end of a successful reload
         var amount = Math.min(this.currentReserve, this.magSize - this.currentMag);
         this.currentReserve -= amount;
         this.currentMag += amount;
+    }
+    interruptReload() { 
+        this.reloading = false;
+        this.reloadTimer = 0;
+        try {
+        SMInstance[this.parentPlayer.id].sounds[this.internalName + "reload"].stop();
+        }
+        catch(e) {
+            console.log('no reload sound found to stop!');
+        }
+
+        //this.parentPlayer.id
     }
     tickUpdate() {
         if(this.reloadTimer > 0) {
@@ -5649,7 +5683,16 @@ cameraBorders['five'] = {
 var cameraBorder = cameraBorders[MAP_NAME];
 
 var Images = new ImageManager();
-var Sounds = new SoundManager();
+
+//try 4 copies of sound manager for ease
+//player-specific sounds should be played/stopped in the respective manager
+//var Sounds = new SoundManager();
+var SMInstance = [];
+for(var i = 0; i < 4; i++) {
+    SMInstance.push(new SoundManager);
+}
+var Sounds = SMInstance[0];
+
 var MysteryBox = new MysteryBoxManager();
 
 var playerFacing = 0;
@@ -6346,8 +6389,7 @@ function updatePositions() {
                 players[i].melee = false;
                 players[i].fire = false;
                 players[i].reload = false;
-                players[i].weapon.reloading = false;
-                players[i].weapon.reloadTimer = 0;
+                players[i].weapon.interruptReload();
 
                 Sounds.playSound('knife');
 
@@ -7308,8 +7350,7 @@ function checkProximityActions() {
                                 //ok to revive
 
                                 //cancel reload
-                                players[p].weapon.reloading = false;
-                                players[p].weapon.reloadTimer = 0;
+                                players[p].weapon.interruptReload()
 
                                 players[downedPlayerId].currentReviver = p;
                                 players[downedPlayerId].reviveHealthAmount = 0.45;
